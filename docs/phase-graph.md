@@ -90,7 +90,7 @@ capability, repository, branch, budget, gate result, or disposition rule.
 | Verify admitted origin observation | Deterministic law | `B03_REMOTE_BINDING` |
 | Observe or create missing scaffold file | External interaction | `B04_REQUIRED_FILES` request and settlement |
 | Observe or create required label | External interaction | `B05_LABELS` request and settlement |
-| Bootstrap commit and publication | External interaction | `B06_BOOTSTRAP_PUBLICATION` request and settlement |
+| Evaluate bootstrap-publication preconditions | Deterministic law | `B06_BOOTSTRAP_PUBLICATION`; direct-main need escalates |
 | Observe branch protection and collaborators | External interaction | `B07_PROTECTION` request and settlement |
 | Match BAD CODE and COOL IDEA duplicates | Deterministic law | Operates on admitted issue snapshot |
 | Repository routing | Deterministic law | Exact routing table in policy |
@@ -148,12 +148,12 @@ capability, repository, branch, budget, gate result, or disposition rule.
 Documentation prose is not a separate judgment capability. Before
 `AuthorMinimalFix`, a deterministic affected-document projection may add exact
 documentation paths and RED evidence to that leaf's proposal policy.
-`P38_RECONCILE_DOCS` validates the proposal and emits an
-`ApplyValidatedPatch` request for an adapter; the model receives no write
-capability. Deterministic commit staging keeps implementation and documentation
-commits separate. If reconciliation finds unprepared drift, or the corpus
-cannot state its required projection mechanically, the machine escalates with
-`MissingDeterministicDocumentationProjection`.
+`P38_RECONCILE_DOCS` prepares and validates that projection without mutation.
+`P39_COMMIT_DOCS` emits the `ApplyValidatedPatch` request; after settlement it
+creates the separate documentation commit from explicit paths. The model
+receives no write capability. If reconciliation finds unprepared drift, or the
+corpus cannot state its required projection mechanically, the machine escalates
+with `MissingDeterministicDocumentationProjection`.
 
 ## Predicates
 
@@ -453,7 +453,7 @@ counter, it records evidence and transitions to `ESCALATED`.
 | `P36_VERIFY_GREEN` | Relevant suites pass | `P37_COMMIT_GREEN` | Failure returns named evidence to `J34`; consumes attempt. |
 | `P37_COMMIT_GREEN` | Explicit implementation commit exists | `P38_RECONCILE_DOCS` | Commit policy violation escalates. |
 | `P38_RECONCILE_DOCS` | Prepared corpus projection passes | `P39_COMMIT_DOCS` | Unprepared or nondeterministic documentation drift escalates. |
-| `P39_COMMIT_DOCS` | Separate explicit doc commit exists or no doc delta | `P40_CHANGELOG` | Mixed staging escalates. |
+| `P39_COMMIT_DOCS` | Validated doc patch settles and a separate explicit doc commit exists, or no doc delta exists | `P40_CHANGELOG` | Patch or staging failure escalates. |
 | `P40_CHANGELOG` | Exactly one normalized entry inserted | `P41_COMMIT_CHANGELOG` | Ambiguous section escalates. |
 | `P41_COMMIT_CHANGELOG` | Separate changelog commit exists | `J42_ASSESS_DIFF` | Mixed staging escalates. |
 | `J42_ASSESS_DIFF` | Typed assessment validates | `J43_CLASSIFY_FINDINGS` | Malformed return escalates. |

@@ -26,8 +26,9 @@ Operative addenda recorded after the baseline prompt:
   self-hosted program still excludes that capability because its requested
   negative-test suite requires rejection.
 - Roadmap ordering and the external-action invariants are owned by
-  `docs/roadmap.md`; the baseline prompt below is retained unchanged as
-  historical execution input.
+  `docs/roadmap.md`; the baseline prompt below remains the preserved
+  human-directed execution protocol until Roadmap Ω passes its negative
+  envelope tests.
 
 ---
 

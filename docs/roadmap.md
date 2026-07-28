@@ -39,7 +39,7 @@ sequenceDiagram
     E->>E: admit REQUESTED
     E->>A: grant bounded claim
     A->>E: settlement plus evidence
-    E->>E: admit SETTLED or OUTCOME_UNKNOWN
+    E->>E: admit SETTLED or outcome_unknown
     E->>P: resume from admitted history
 ```
 
@@ -99,7 +99,7 @@ Add `ApplyValidatedPatch` only after read-only observation is green:
 - deterministic law validates paths, basis, shape, and policy;
 - Echo admits an `ApplyValidatedPatch` request before mutation;
 - the adapter applies only the validated artifact;
-- settlement records the resulting basis or `OUTCOME_UNKNOWN`; and
+- settlement records the resulting basis or `outcome_unknown`; and
 - replay never reapplies the patch.
 
 No generic process, filesystem, or network capability is introduced.
