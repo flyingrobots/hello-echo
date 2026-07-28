@@ -36,6 +36,9 @@ ECHO_REPO=/path/to/echo \
 ./tests/build.sh
 ```
 
+Run `./tests/build-cleans-output.sh` with the same environment to verify that a
+new invocation cannot be satisfied by stale application artifacts.
+
 The build:
 
 1. corroborates every vendored causal-cell artifact byte-for-byte against
