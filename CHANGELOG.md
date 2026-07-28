@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   report artifacts.
 - Durable singleton runtime witness covering WAL-before-ack submission,
   scheduler-owned evaluation, restart recovery, typed duplicate obstruction,
-  altered-basis refusal, fixed-seed input cases, and bounded stress.
+  altered-basis refusal, byte-identical replay, fixed-seed input cases, and
+  bounded stress.
 - Delivery-loop hosting feasibility report against the current Edict-to-Echo
   seam.
 - Syntax-independent delivery-loop phase graph with guarded transitions,
