@@ -3,10 +3,14 @@ set -eu
 
 : "${ECHO_REPO:?set ECHO_REPO to the compatible Echo checkout}"
 
-input_file=${1:?usage: tests/run.sh INPUT_JSON WAL_DIRECTORY}
-wal_dir=${2:?usage: tests/run.sh INPUT_JSON WAL_DIRECTORY}
+if test "$#" -ne 2; then
+  echo "usage: tests/run.sh INPUT_JSON WAL_DIRECTORY" >&2
+  exit 2
+fi
+input_file=$1
+wal_dir=$2
 
-project_root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd -P)
+project_root=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd -P)
 
 case "$input_file" in
   /*) ;;

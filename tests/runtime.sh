@@ -12,6 +12,24 @@ runtime_root=.build/runtime-tests
 rm -rf "$runtime_root"
 mkdir -p "$runtime_root"
 
+package_file=.build/application/executable-operation-package.cbor
+verification_report_file=.build/application/verification-report.cbor
+lawpack_manifest_file=vendor/causal-cell/manifest.cbor
+expected_package_sha256=67dc6d23e223e78b6aa774a2f57c86db2eff4981ea793975d39c66f731f02fd1
+expected_verification_report_sha256=8a5153b4ec25ebe979f0ceab373d03969e30a64d7973b3a83e3c84877c5aa564
+expected_lawpack_manifest_sha256=7bb901c984a92ed50795f8b5f7efe8d0648124574fa82250c6373a30e94333c9
+
+sha256_file() {
+  if command -v sha256sum >/dev/null; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    echo "runtime witness requires sha256sum or shasum" >&2
+    return 1
+  fi
+}
+
 run_case() {
   case_name=$1
   input_file=$2
@@ -25,14 +43,24 @@ run_case() {
 
 assert_common_witness() {
   witness=$1
-  jq -e '
+  package_sha256=$(sha256_file "$package_file")
+  verification_report_sha256=$(sha256_file "$verification_report_file")
+  lawpack_manifest_sha256=$(sha256_file "$lawpack_manifest_file")
+  test "$package_sha256" = "$expected_package_sha256"
+  test "$verification_report_sha256" = "$expected_verification_report_sha256"
+  test "$lawpack_manifest_sha256" = "$expected_lawpack_manifest_sha256"
+  jq -e \
+    --arg package_sha256 "$package_sha256" \
+    --arg verification_report_sha256 "$verification_report_sha256" \
+    --arg lawpack_manifest_sha256 "$lawpack_manifest_sha256" \
+    '
     .operation == "examples.hello_echo@1.createGreeting"
     and .artifacts.package.algorithm == "sha256"
-    and .artifacts.package.digestHex == "67dc6d23e223e78b6aa774a2f57c86db2eff4981ea793975d39c66f731f02fd1"
+    and .artifacts.package.digestHex == $package_sha256
     and .artifacts.verificationReport.algorithm == "sha256"
-    and .artifacts.verificationReport.digestHex == "8a5153b4ec25ebe979f0ceab373d03969e30a64d7973b3a83e3c84877c5aa564"
+    and .artifacts.verificationReport.digestHex == $verification_report_sha256
     and .artifacts.lawpackManifest.algorithm == "sha256"
-    and .artifacts.lawpackManifest.digestHex == "7bb901c984a92ed50795f8b5f7efe8d0648124574fa82250c6373a30e94333c9"
+    and .artifacts.lawpackManifest.digestHex == $lawpack_manifest_sha256
     and .submission.walCommittedBeforeAck == true
     and .scheduler.actionCount == 1
     and .recovery.pendingActionRecovered == true
@@ -69,7 +97,16 @@ run_case replay tests/create-greeting.json
 cmp "$golden_witness" "$runtime_root/replay/witness.json"
 
 # The witness is portable evidence and must not disclose checkout paths.
-if grep -F -e "$EDICT_REPO" -e "$ECHO_REPO" -e "$(pwd -P)" "$golden_witness" >/dev/null; then
+edict_repo_root=$(CDPATH='' cd -- "$EDICT_REPO" && pwd -P)
+echo_repo_root=$(CDPATH='' cd -- "$ECHO_REPO" && pwd -P)
+project_root=$(pwd -P)
+if grep -F \
+  -e "$edict_repo_root" \
+  -e "$echo_repo_root" \
+  -e "$project_root" \
+  "$golden_witness" \
+  >/dev/null
+then
   echo "runtime witness disclosed a host checkout path" >&2
   exit 1
 fi
