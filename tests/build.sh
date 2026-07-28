@@ -36,6 +36,7 @@ if find .build/echo-provider -type l -print -quit | grep -q .; then
   exit 1
 fi
 
+rm -rf .build/application
 cargo run \
   --quiet \
   --manifest-path "$EDICT_REPO/Cargo.toml" \
