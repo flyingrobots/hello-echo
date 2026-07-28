@@ -1,6 +1,6 @@
 package examples.hello_echo@1;
 
-use lawpack causal.cell@1 digest "sha256:ae992f40a8ecc3fbab55354718136e05fa597a487b3efe10647e2f98b9c42a7b" as cell;
+use lawpack causal.cell@1 digest "sha256:42d96b95089ff634ab104274aa5e269c8088af8e311daa5826bd0436871f2590" as cell;
 
 type CreateGreetingInput = {
   basis: String<max=128>,

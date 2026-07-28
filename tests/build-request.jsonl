@@ -1,1 +1,1 @@
-{"schema":"edict.compiler.settings/v1","type":"settings","operation":"build","application":"edict.application.json"}
+{"schema":"edict.compiler.settings/v1","type":"compilerSettings","operation":"build","application":"edict.application.json"}
