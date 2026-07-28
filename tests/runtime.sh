@@ -64,6 +64,10 @@ jq -e '
   and .state.valueUtf8 == "Hello Echo"
 ' "$golden_witness" >/dev/null
 
+# Identical admitted history must produce byte-identical causal evidence.
+run_case replay tests/create-greeting.json
+cmp "$golden_witness" "$runtime_root/replay/witness.json"
+
 # The witness is portable evidence and must not disclose checkout paths.
 if grep -F -e "$EDICT_REPO" -e "$ECHO_REPO" -e "$(pwd -P)" "$golden_witness" >/dev/null; then
   echo "runtime witness disclosed a host checkout path" >&2
@@ -168,4 +172,4 @@ while test "$stress_ordinal" -le "$stress_count"; do
   stress_ordinal=$((stress_ordinal + 1))
 done
 
-printf '%s\n' "runtime witness suite passed: 1 golden, 2 refusals, 1 boundary, 3 fixed-seed property, 8 stress"
+printf '%s\n' "runtime witness suite passed: 1 golden, 1 replay, 2 refusals, 1 boundary, 3 fixed-seed property, 8 stress"
