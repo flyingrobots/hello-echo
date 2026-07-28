@@ -80,9 +80,10 @@ The structured witness proves:
 - refusal to recover the WAL against a mutated pre-Tick initial state; and
 - exact compiler artifact identities without checkout paths in the report.
 
-The test matrix includes the golden case, malformed and oversized refusals, the
-exact 256-byte replacement boundary, three cases derived from fixed seed
-`69603`, and eight bounded isolated recovery runs.
+The test matrix includes the golden case, a byte-identical replay witness,
+malformed and oversized refusals, the exact 256-byte replacement boundary,
+three cases derived from fixed seed `69603`, and eight bounded isolated
+recovery runs.
 
 This is singleton scheduler integration: one Action in one Tick. It does not
 claim permanent multi-Action Tick composition or introduce external effects.
