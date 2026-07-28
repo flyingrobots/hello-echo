@@ -98,14 +98,14 @@ grep -F "operation input fields do not match the target configuration" \
   "$runtime_root/malformed.stderr" >/dev/null
 
 # Boundary: the exact configured replacement limit passes; one byte over refuses.
-jq -n --arg value "$(jq -nr '"x" * 1024')" \
+jq -n --arg value "$(jq -nr '"x" * 256')" \
   '{basis:"boundary",key:"maximum",value:$value}' \
   >"$runtime_root/maximum-input.json"
 run_case maximum "$runtime_root/maximum-input.json"
 assert_common_witness "$runtime_root/maximum/witness.json"
-test "$(jq -r '.state.valueUtf8 | length' "$runtime_root/maximum/witness.json")" -eq 1024
+test "$(jq -r '.state.valueUtf8 | length' "$runtime_root/maximum/witness.json")" -eq 256
 
-jq -n --arg value "$(jq -nr '"x" * 1025')" \
+jq -n --arg value "$(jq -nr '"x" * 257')" \
   '{basis:"boundary",key:"too-large",value:$value}' \
   >"$runtime_root/oversized-input.json"
 if ./tests/run.sh \
