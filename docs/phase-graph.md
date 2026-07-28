@@ -131,10 +131,13 @@ repository, branch, budget, gate result, or disposition rule.
 | Escalation trigger and record | Deterministic | First-class terminal transition |
 | Final report | Deterministic | Projection from committed `RunState` |
 
-Documentation prose is not a separate judgment capability. A deterministic
-corpus check may identify exact affected paths and return RED evidence to
-`AuthorMinimalFix`; the fix leaf may then edit only those paths. If the corpus
-cannot state its required projection mechanically, the machine escalates with
+Documentation prose is not a separate judgment capability. Before
+`AuthorMinimalFix`, a deterministic affected-document projection may add exact
+documentation paths and RED evidence to that leaf's scope. The implementation
+and documentation edits are applied together, but deterministic staging keeps
+their commits separate. `P38_RECONCILE_DOCS` only verifies that prepared
+projection. If it finds unprepared drift, or the corpus cannot state its
+required projection mechanically, the machine escalates with
 `MissingDeterministicDocumentationProjection`.
 
 ## Predicates
@@ -416,7 +419,7 @@ and transitions to `ESCALATED`.
 | `P35_APPLY_FIX` | Patch applies with no scope escape | `P36_VERIFY_GREEN` | Scope/path violation escalates. |
 | `P36_VERIFY_GREEN` | Relevant suites pass | `P37_COMMIT_GREEN` | Failure returns named evidence to `J34`; consumes attempt. |
 | `P37_COMMIT_GREEN` | Explicit implementation commit exists | `P38_RECONCILE_DOCS` | Commit policy violation escalates. |
-| `P38_RECONCILE_DOCS` | Corpus checks pass | `P39_COMMIT_DOCS` | Required nondeterministic prose escalates. |
+| `P38_RECONCILE_DOCS` | Prepared corpus projection passes | `P39_COMMIT_DOCS` | Unprepared or nondeterministic documentation drift escalates. |
 | `P39_COMMIT_DOCS` | Separate explicit doc commit exists or no doc delta | `P40_CHANGELOG` | Mixed staging escalates. |
 | `P40_CHANGELOG` | Exactly one normalized entry inserted | `P41_COMMIT_CHANGELOG` | Ambiguous section escalates. |
 | `P41_COMMIT_CHANGELOG` | Separate changelog commit exists | `J42_ASSESS_DIFF` | Mixed staging escalates. |
