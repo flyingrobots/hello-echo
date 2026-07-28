@@ -92,9 +92,11 @@ jq -e '
   and .state.valueUtf8 == "Hello Echo"
 ' "$golden_witness" >/dev/null
 
-# Identical admitted history must produce byte-identical causal evidence.
-run_case replay tests/create-greeting.json
-cmp "$golden_witness" "$runtime_root/replay/witness.json"
+# Identical source, closure, input, and empty-WAL basis produce identical evidence.
+# Persisted-WAL replay occurs inside each generic runner invocation and is
+# asserted by the recovery fields above.
+run_case deterministic-rerun tests/create-greeting.json
+cmp "$golden_witness" "$runtime_root/deterministic-rerun/witness.json"
 
 # The witness is portable evidence and must not disclose checkout paths.
 edict_repo_root=$(CDPATH='' cd -- "$EDICT_REPO" && pwd -P)
@@ -112,14 +114,15 @@ then
 fi
 
 # Compiler output remains generated and untracked; Edict is the only source language.
-if git ls-files --error-unmatch \
+for generated_artifact in \
   .build/application/executable-operation-package.cbor \
-  .build/application/verification-report.cbor \
-  >/dev/null 2>&1
-then
-  echo "compiler output must not become a handwritten tracked package" >&2
-  exit 1
-fi
+  .build/application/verification-report.cbor
+do
+  if git ls-files --error-unmatch "$generated_artifact" >/dev/null 2>&1; then
+    echo "compiler output must not become a handwritten tracked package" >&2
+    exit 1
+  fi
+done
 test "$(git ls-files src)" = "src/hello_echo.edict"
 
 # Known failure: malformed typed input fails before a passing witness exists.
@@ -209,4 +212,4 @@ while test "$stress_ordinal" -le "$stress_count"; do
   stress_ordinal=$((stress_ordinal + 1))
 done
 
-printf '%s\n' "runtime witness suite passed: 1 golden, 1 replay, 2 refusals, 1 boundary, 3 fixed-seed property, 8 stress"
+printf '%s\n' "runtime witness suite passed: 1 golden, 1 deterministic rerun, 2 refusals, 1 boundary, 3 fixed-seed property, 8 stress"

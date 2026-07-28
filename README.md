@@ -71,19 +71,21 @@ closure, typed JSON input, and empty WAL path to Echo's generic
 The structured witness proves:
 
 - accepted-submission WAL commit before acknowledgement;
-- pending-Action recovery before evaluation;
+- pending-Action recovery by reopening the same WAL before evaluation;
 - one scheduler-selected Action in one atomic Tick;
-- decided-Tick recovery of Action, Tick, state, outcome, and Receipt;
+- decided-Tick recovery of Action, Tick, state, outcome, and Receipt by
+  reopening that persisted WAL in another fresh host;
 - successful greeting state derived from typed input;
 - package-declared `causal.cell@1.AlreadyExists` obstruction on duplicate
   creation without hidden mutation;
 - refusal to recover the WAL against a mutated pre-Tick initial state; and
 - exact compiler artifact identities without checkout paths in the report.
 
-The test matrix includes the golden case, a byte-identical replay witness,
-malformed and oversized refusals, the exact 256-byte replacement boundary,
-three cases derived from fixed seed `69603`, and eight bounded isolated
-recovery runs.
+The test matrix includes the golden case, a byte-identical deterministic fresh
+rerun, malformed and oversized refusals, the exact 256-byte replacement
+boundary, three cases derived from fixed seed `69603`, and eight bounded
+isolated recovery runs. WAL replay is the fresh-host recovery performed inside
+each generic runner invocation; the deterministic rerun is separate evidence.
 
 This is singleton scheduler integration: one Action in one Tick. It does not
 claim permanent multi-Action Tick composition or introduce external effects.

@@ -75,9 +75,11 @@ Roadmap A ends when the standalone witness passes without a runtime fake,
 native application callback, handwritten package, or host-checkout path.
 
 The standalone witness now covers all seven steps with one Action in one Tick.
-That is a singleton scheduler proof, not a claim that the permanent
-multi-Action Tick model is complete. Roadmap A.1 begins only after the runtime
-witness lands on `main`.
+The generic runner reopens one persisted WAL for pending and decided recovery;
+the external suite separately proves byte-identical deterministic reruns from
+the same empty-WAL basis. This is a singleton scheduler proof, not a claim that
+the permanent multi-Action Tick model is complete. Roadmap A.1 begins only
+after the runtime witness lands on `main`.
 
 ## Roadmap A.1 — Hello Effect
 
