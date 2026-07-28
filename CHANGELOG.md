@@ -11,3 +11,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Delivery-loop hosting feasibility report against the current Edict-to-Echo
   seam.
+- Syntax-independent delivery-loop phase graph with guarded transitions,
+  declared effects, bounded judgment leaves, and terminal reachability.
