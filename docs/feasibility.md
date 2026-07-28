@@ -123,26 +123,45 @@ It does not currently persist an Edict continuation at an effect boundary or
 correlate an external response with such a continuation. CI and review polling
 therefore cannot be expressed as a safe hosted wait.
 
-Required extension:
+Minimum state required of the extension:
 
 ```text
 EffectRequested {
   run_id,
   transition_id,
   effect_id,
+  adapter_idempotency_key,
+  program_binding_digest,
   capability,
   canonical_request,
   request_digest
 }
 
+EffectDispatchClaimed {
+  effect_id,
+  attempt,
+  adapter_id,
+  lease_owner,
+  lease_epoch,
+  witnessed_lease_deadline
+}
+
 EffectCompleted | EffectFailed {
   effect_id,
+  adapter_idempotency_key,
+  program_binding_digest,
   canonical_result,
   result_digest
 }
 
+EffectOutcomeUnknown {
+  effect_id,
+  attempt,
+  reason
+}
+
 SuspendedContinuation {
-  program_id,
+  program_binding_digest,
   state_schema,
   canonical_state,
   next_transition,
@@ -150,9 +169,26 @@ SuspendedContinuation {
 }
 ```
 
-The request must commit before dispatch. The completion must commit before the
-transition resumes. Duplicate completion, unknown correlation, changed program
-identity, stale state schema, and noncanonical result must fail closed.
+`program_binding_digest` must immutably bind the admitted program, exact
+capability set, authority policy, and continuation-state schema. `effect_id` is
+also the adapter-visible idempotency key unless an adapter declares a separate
+stable key. A dispatch claim and its attempt number must commit before the
+adapter is called. Lease expiry is not inferred from ambient time; the host
+records the time or scheduler evidence used to authorize a new claim.
+
+Recovery must enqueue a committed request with no dispatch claim. A claimed
+request with no completion remains owned until its witnessed lease expires.
+After expiry, recovery may retry only a read-only effect or an adapter that
+guarantees idempotency for the same key. Otherwise it records
+`EffectOutcomeUnknown` and takes the first-class escalation transition; it must
+not guess whether a Git push, GitHub mutation, process, or filesystem write
+occurred.
+
+A completion must commit before the transition resumes and must match the exact
+effect id, idempotency key, program binding, request, adapter, attempt policy,
+and result schema. Duplicate completion, unknown correlation, changed program
+or capability identity, stale state schema, noncanonical result, and a result
+from an unauthorized adapter must fail closed.
 
 ## Effect capability representation
 
