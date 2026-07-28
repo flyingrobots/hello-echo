@@ -13,3 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   seam.
 - Syntax-independent delivery-loop phase graph with guarded transitions,
   declared effects, bounded judgment leaves, and terminal reachability.
+
+### Changed
+
+- Restored the pure compiler-to-runtime Hello Echo proof as Roadmap A, defined
+  durable request and witnessed-settlement boundaries for later external
+  effects, and moved the self-hosted delivery loop to Roadmap Ω.
