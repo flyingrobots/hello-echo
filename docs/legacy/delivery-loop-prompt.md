@@ -2,13 +2,20 @@
 
 <!-- markdownlint-disable MD013 MD025 -->
 
-Status: **operative**.
+Status: **operative as a human-directed delivery protocol**.
 
 Replacement status: `docs/phase-graph.md` is a specification, not a runtime.
-This prompt remains the execution authority until the capability model, Edict
-program, and negative envelope tests are implemented and pass. The later
-operator authorization to use administrative merge was an execution-specific
-override and is not folded into this preserved baseline.
+This prompt remains the execution protocol until the external-action boundary,
+Edict program, and negative envelope tests are implemented and pass. It is not
+authoritative for roadmap ordering. `docs/roadmap.md` restores Pure Hello Echo
+as Roadmap A and moves this loop to Roadmap Ω.
+
+The target replacement uses three categories: deterministic law, external
+interaction, and judgment. Edict emits typed requests; Echo records requests
+before execution and settlements before resumption; adapters alone touch the
+world. Models return untrusted proposal data and receive no mutation authority.
+The later operator authorization to use administrative merge was an
+execution-specific override and is not folded into this preserved baseline.
 
 Operative addenda recorded after the baseline prompt:
 
@@ -18,6 +25,9 @@ Operative addenda recorded after the baseline prompt:
 - The current human-directed run may use administrative merge. The target
   self-hosted program still excludes that capability because its requested
   negative-test suite requires rejection.
+- Roadmap ordering and the external-action invariants are owned by
+  `docs/roadmap.md`; the baseline prompt below is retained unchanged as
+  historical execution input.
 
 ---
 

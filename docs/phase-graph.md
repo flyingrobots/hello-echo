@@ -12,13 +12,15 @@ not operations exposed by the current Edict-to-Echo seam.
 
 This document replaces phase ordering, gate evaluation, budget accounting,
 repository routing, and authority rules in the delivery-loop prompt with one
-state machine. It does not implement the machine.
+state machine. It does not implement the machine. `docs/roadmap.md` places that
+implementation in Roadmap Ω after smaller external-action proofs.
 
-The preserved prompt remains operative until the negative envelope tests pass.
+The preserved prompt remains the human-directed delivery protocol until the
+negative envelope tests pass. It is not authoritative for roadmap ordering.
 The later operator authorization to use administrative merge applies to the
-current human-directed run only. The target machine retains `AdminMerge` in
-the forbidden set because the requested negative test requires that operation
-to be unrepresentable.
+current human-directed run only. The target machine retains `AdminMerge` in the
+forbidden set because the requested negative test requires that operation to be
+unrepresentable.
 
 ## Machine state
 
@@ -66,78 +68,91 @@ gate_closure_count_by_criterion = 0 for every criterion
 tasks_remaining = 8
 ```
 
-Every transition commits the next `RunState` before its newly authorized
-external effect begins. A resumed machine starts from the last committed
-transition. The current runtime cannot provide that guarantee; this is a
-requirement on the future host.
+Every transition commits the next `RunState` and typed external request before
+an adapter acts. The adapter may act only after Echo records a bounded claim.
+Echo admits the settlement before the program resumes. A resumed machine starts
+from committed program state and history, not a serialized native stack. The
+current runtime cannot provide that guarantee; this is a requirement on the
+future host.
 
 ## Classification
 
-Each loop element belongs to exactly one bucket. Deterministic work may consume
-validated judgment output, but a model never chooses a transition, capability,
-repository, branch, budget, gate result, or disposition rule.
+Each loop element belongs to exactly one of three buckets. Deterministic law may
+consume admitted observations and validated judgment output. An external
+interaction may observe or mutate the world only through a typed request and
+settlement. Judgment returns proposal data. A model never chooses a transition,
+capability, repository, branch, budget, gate result, or disposition rule.
 
 | Loop element | Bucket | Machine treatment |
 | --- | --- | --- |
-| Bootstrap repository existence check | Deterministic | `B01_REMOTE_REPOSITORY` |
-| Bootstrap local repository check | Deterministic | `B02_LOCAL_REPOSITORY` |
-| Bootstrap origin verification | Deterministic | `B03_REMOTE_BINDING` |
-| Required-file existence and create-only behavior | Deterministic | `B04_REQUIRED_FILES` |
-| Required-label existence | Deterministic | `B05_LABELS` |
-| Bootstrap commit and publication | Deterministic | `B06_BOOTSTRAP_PUBLICATION` |
-| Branch-protection and collaborator inspection | Deterministic | `B07_PROTECTION` |
-| BAD CODE and COOL IDEA duplicate matching | Deterministic | `L10_BACKLOG` |
-| Repository routing | Deterministic | Exact routing table in policy |
-| Cross-repository task split | Deterministic | One issue per repository |
-| GitHub issue dependencies | Deterministic | GraphQL dependency mutation only |
-| Tracking-issue maintenance | Deterministic | `L10_BACKLOG` |
-| Milestone assignment and roadmap order | Deterministic | `L11_ROADMAP` |
-| Dependency-cycle detection | Deterministic | Cycle means `ESCALATED` |
-| Critical-path computation | Deterministic | Dependency DAG plus explicit roadmap order |
-| Select a sole highest-priority candidate | Deterministic | `L12_SELECT_TASK` |
+| Observe remote repository existence | External interaction | `B01_REMOTE_REPOSITORY` request and settlement |
+| Observe local repository | External interaction | `B02_LOCAL_REPOSITORY` request and settlement |
+| Verify admitted origin observation | Deterministic law | `B03_REMOTE_BINDING` |
+| Observe or create missing scaffold file | External interaction | `B04_REQUIRED_FILES` request and settlement |
+| Observe or create required label | External interaction | `B05_LABELS` request and settlement |
+| Bootstrap commit and publication | External interaction | `B06_BOOTSTRAP_PUBLICATION` request and settlement |
+| Observe branch protection and collaborators | External interaction | `B07_PROTECTION` request and settlement |
+| Match BAD CODE and COOL IDEA duplicates | Deterministic law | Operates on admitted issue snapshot |
+| Repository routing | Deterministic law | Exact routing table in policy |
+| Cross-repository task split | Deterministic law | One issue per repository |
+| Mutate GitHub issue dependencies | External interaction | GraphQL dependency request only |
+| Mutate tracking issue | External interaction | `L10_BACKLOG` request and settlement |
+| Choose milestone and roadmap position | Deterministic law | Explicit total order |
+| Assign milestone | External interaction | `L11_ROADMAP` request and settlement |
+| Detect dependency cycle | Deterministic law | Cycle means `ESCALATED` |
+| Compute critical path | Deterministic law | Dependency DAG plus explicit roadmap order |
+| Select a sole highest-priority candidate | Deterministic law | `L12_SELECT_TASK` |
 | Select among tied unblocked candidates | Judgment | `SelectTieTask` |
-| Fetch and pin `origin/main` | Deterministic | `T20_FETCH_BASE` |
-| Clean-tree, auth, and ref-current gates | Deterministic | `T21_TASK_PRECONDITIONS` |
-| Branch naming and creation | Deterministic | `T22_CREATE_BRANCH` |
+| Fetch and observe `origin/main` | External interaction | `T20_FETCH_BASE` request and settlement |
+| Evaluate clean-tree, auth, and ref-current gates | Deterministic law | `T21_TASK_PRECONDITIONS` |
+| Create policy-named feature branch | External interaction | `T22_CREATE_BRANCH` request and settlement |
 | Author RED tests | Judgment | `AuthorRedTests` |
-| Test-suite shape check | Deterministic | Golden, failure, edge, seeded property, stress |
-| RED execution and intended-failure check | Deterministic | `P33_VERIFY_RED` |
+| Validate proposed test-suite shape | Deterministic law | Golden, failure, edge, seeded property, stress |
+| Apply validated test patch | External interaction | `P31_APPLY_RED` request and settlement |
+| Run registered RED check | External interaction | `P33_VERIFY_RED` request and settlement |
+| Evaluate intended RED failure | Deterministic law | Assertion failure, not compile/setup failure |
 | Author the minimal fix | Judgment | `AuthorMinimalFix` |
-| Apply a returned patch | Deterministic | Schema, path, size, and scope validation |
-| GREEN execution | Deterministic | Repository-owned commands |
-| Documentation reconciliation | Deterministic | Checked corpus projection; unresolved semantic drift escalates |
-| Changelog insertion | Deterministic | Append one normalized entry under `Unreleased` |
+| Validate a patch proposal | Deterministic law | Schema, basis, path, size, and policy |
+| Apply a validated patch | External interaction | `P35_APPLY_FIX` request and settlement |
+| Run registered GREEN check | External interaction | Repository-owned registered check |
+| Evaluate GREEN result | Deterministic law | Required assertions pass |
+| Reconcile documentation | Deterministic law | Checked projection; unresolved semantic drift escalates |
+| Apply validated documentation patch | External interaction | Exact prepared document paths |
+| Normalize changelog insertion | Deterministic law | One entry under `Unreleased` |
+| Apply validated changelog patch | External interaction | Exact changelog path |
 | Commit-message and PR-intent summary | Judgment | `SummarizeIntent` |
-| Explicit staging and commit | Deterministic | No implicit or all-path staging |
+| Create commit from explicit paths | External interaction | No implicit or all-path staging |
 | Decide whether the diff achieves intent | Judgment | `AssessDiffIntent` |
 | Classify a finding | Judgment | `ClassifyFinding` |
-| Finding aggregation, ordering, grouping, histogram | Deterministic | Stable tuple ordering |
-| Severity remediation routing | Deterministic | P0-P2 loop; P3-P4 in-place; P5 issue note |
-| Phase-1 attempt accounting | Deterministic | Maximum three |
-| Feature-branch push | Deterministic | Pinned non-main ref only |
-| PR creation and closure reference | Deterministic | Host injects exact issue reference |
-| Bot-review requests and polling | Deterministic | Fixed reviewers, interval, and deadline |
-| Bot completion detection | Deterministic | Review, refusal, cooldown, timed acknowledgment, or deadline |
-| Code Lawyer thread intake | Deterministic | Unresolved bot-authored threads only |
+| Aggregate, order, group, and count findings | Deterministic law | Stable tuple ordering |
+| Route severity remediation | Deterministic law | P0-P2 loop; P3-P4 in-place; P5 issue note |
+| Account Phase-1 attempts | Deterministic law | Maximum three |
+| Push feature ref | External interaction | Pinned non-main ref only |
+| Open PR with closure reference | External interaction | Host injects exact issue reference |
+| Request and observe bot review | External interaction | Fixed reviewers, interval, and deadline |
+| Detect bot completion | Deterministic law | Review, refusal, cooldown, timed acknowledgment, or deadline |
+| Build Code Lawyer intake | Deterministic law | Unresolved bot-authored threads only |
 | Finding applicability to diff intent | Judgment | `AssessDiffIntent` |
-| Thread outcome derivation | Deterministic | FIXED, DEFERRED, STALE, UNREPRODUCIBLE, BLOCKED |
-| Bot-thread reply and resolution | Deterministic | Human-authored threads cannot be resolved |
-| Code Lawyer pass accounting | Deterministic | Maximum two |
-| Merge-gate evaluation and order | Deterministic | CI, threads, outcomes, local checks, approval |
-| Merge method and non-admin rule | Deterministic | Policy-selected allowed method; no admin capability |
-| Main sync, prune, local-branch deletion | Deterministic | Safe operations only |
-| Issue closure verification | Deterministic | Close only the task issue with merge evidence |
-| Outer-loop budget | Deterministic | Decrement after a completed task sync |
-| Escalation trigger and record | Deterministic | First-class terminal transition |
-| Final report | Deterministic | Projection from committed `RunState` |
+| Derive thread outcome | Deterministic law | FIXED, DEFERRED, STALE, UNREPRODUCIBLE, BLOCKED |
+| Reply to or resolve bot thread | External interaction | Human-authored threads cannot be resolved |
+| Account Code Lawyer passes | Deterministic law | Maximum two |
+| Evaluate merge gate in order | Deterministic law | CI, threads, outcomes, local checks, approval |
+| Merge gated PR | External interaction | Policy-selected allowed method; no admin operation |
+| Sync, prune, and delete safe branch | External interaction | Separate bounded requests |
+| Verify task issue closure | Deterministic law | Exact task and merge evidence |
+| Close merged task issue | External interaction | Exact task issue only |
+| Account outer-loop budget | Deterministic law | Decrement after a completed task sync |
+| Select escalation and record fields | Deterministic law | First-class terminal transition |
+| Project final report | Deterministic law | Projection from committed `RunState` |
 
 Documentation prose is not a separate judgment capability. Before
 `AuthorMinimalFix`, a deterministic affected-document projection may add exact
-documentation paths and RED evidence to that leaf's scope. The implementation
-and documentation edits are applied together, but deterministic staging keeps
-their commits separate. `P38_RECONCILE_DOCS` only verifies that prepared
-projection. If it finds unprepared drift, or the corpus cannot state its
-required projection mechanically, the machine escalates with
+documentation paths and RED evidence to that leaf's proposal policy.
+`P38_RECONCILE_DOCS` validates the proposal and emits an
+`ApplyValidatedPatch` request for an adapter; the model receives no write
+capability. Deterministic commit staging keeps implementation and documentation
+commits separate. If reconciliation finds unprepared drift, or the corpus
+cannot state its required projection mechanically, the machine escalates with
 `MissingDeterministicDocumentationProjection`.
 
 ## Predicates
@@ -283,46 +298,63 @@ stateDiagram-v2
 
 ## Effect catalog
 
-These names identify future capabilities. They do not authorize a current
-implementation.
+These names identify future external-operation request families. They do not
+authorize a current implementation. Edict may construct a declared request;
+Echo records and coordinates it; an operation-specific adapter alone performs
+it.
 
 | Effect | Scope |
 | --- | --- |
-| `RepoRead` | Read explicit repository files, status, refs, diff, log, and configuration. |
-| `RepoCreate` | Create one named local repository or worktree at one resolved path. |
-| `FileCreateMissing` | Create only an absent path from a checked template. |
-| `FilePatch` | Apply a schema-validated patch to an exact attenuated path set. |
-| `GitFetch` | Fetch one configured remote without rewriting refs. |
-| `GitCreateFeatureBranch` | Create `task/<issue>-<slug>` from pinned `origin/main`. |
-| `GitStageExplicit` | Stage a nonempty explicit path list; no wildcard or all-path mode. |
-| `GitCommit` | Create a new commit; no amend or history rewrite. |
-| `GitPushFeature` | Push the exact task ref; destination `main` is not constructible. |
-| `GitSwitchMain` | Switch to the configured merge target when no other worktree owns it. |
-| `GitPullFastForward` | Fast-forward only from the configured remote merge target. |
-| `GitPrune` | Prune deleted remote-tracking refs. |
-| `GitDeleteMergedLocalBranch` | Delete only when Git proves ordinary merged ancestry. |
-| `GitHubRead` | Read one routed repository's issues, PRs, checks, reviews, labels, milestones, protection, and collaborators. |
-| `GitHubRepositoryCreate` | Create the one policy-named repository with fixed visibility and license posture. |
-| `GitHubMetadataWrite` | Create or edit routed issues, labels, milestones, PR descriptions, and comments. |
-| `GitHubDependencyGraphQLWrite` | Add or remove a native `blocked by` edge using GraphQL node identities. |
-| `GitHubCreatePullRequest` | Open one non-draft PR from the current feature ref to the pinned merge target. |
-| `GitHubRequestBotReview` | Post the two fixed reviewer invocations. |
-| `GitHubResolveBotThread` | Resolve only a bot-authored thread after a recorded disposition. |
-| `GitHubMergePullRequest` | Merge an open gated PR using a repository-allowed non-admin method. |
-| `ClockReadWitnessed` | Read bounded wait evidence for reviewer polling. |
-| `RunRepositoryCommand` | Run an allow-listed test, formatter, linter, or read-only inspection command with bounded output. |
-| `ModelCall.AuthorRedTests` | Invoke only the RED-test leaf. |
-| `ModelCall.AuthorMinimalFix` | Invoke only the scoped fix leaf. |
-| `ModelCall.ClassifyFinding` | Invoke only the finding-classification leaf. |
-| `ModelCall.SummarizeIntent` | Invoke only the summary leaf. |
-| `ModelCall.AssessDiffIntent` | Invoke only the diff-assessment leaf. |
-| `ModelCall.SelectTieTask` | Invoke only the tied-task leaf. |
+| `ObserveRepositorySnapshot` | Observe explicit files, status, refs, diff, log, and configuration under one repository basis. |
+| `CreateRepositoryScaffold` | Create one policy-named local repository or worktree at one resolved path. |
+| `CreateMissingScaffoldFile` | Create only an absent required path from a checked template. |
+| `ApplyValidatedPatch` | Apply one already validated patch to its exact basis and path set. |
+| `FetchPinnedBase` | Fetch one configured remote and return the observed base identity without rewriting history. |
+| `CreateFeatureBranch` | Create `task/<issue>-<slug>` from a pinned `origin/main`. |
+| `CreateCommitFromExplicitPaths` | Stage a nonempty explicit path set and create a new commit; no wildcard, amend, or rewrite. |
+| `PushFeatureRef` | Push the exact task ref; destination `main` and force are not request fields. |
+| `SyncMainFastForward` | Switch and fast-forward only the configured merge target when the worktree lease permits it. |
+| `PruneRemoteRefs` | Fetch and prune deleted remote-tracking refs without deleting unrelated refs. |
+| `DeleteOrdinarilyMergedBranch` | Delete only when ordinary ancestry proves the local branch merged. |
+| `ObserveGitHubState` | Observe bounded issues, PRs, checks, reviews, labels, milestones, protection, or collaborators for one repository. |
+| `CreateConfiguredRepository` | Create the one policy-named repository with fixed visibility and license posture. |
+| `EnsureRequiredLabels` | Create only missing policy-declared labels with fixed metadata. |
+| `CreateOrUpdateTrackedIssue` | Create or edit one routed issue from admitted issue data. |
+| `AssignMilestone` | Assign one issue to the deterministic roadmap milestone. |
+| `SetIssueDependency` | Add or remove one native `blocked by` edge using GraphQL node identities. |
+| `OpenTaskPullRequest` | Open one non-draft PR from the current feature ref to the pinned merge target. |
+| `RequestFixedBotReviews` | Post the two policy-declared reviewer requests. |
+| `ReplyToBotThread` | Post one disposition reply to a bot-authored thread. |
+| `ResolveBotThread` | Resolve only a bot-authored thread after a recorded disposition. |
+| `MergeGatedPullRequest` | Merge the exact gated head with a repository-allowed non-admin method. |
+| `CloseMergedTaskIssue` | Close only the task issue with admitted merge evidence. |
+| `ObserveTimerSettlement` | Admit bounded elapsed-time evidence for polling. |
+| `RunRegisteredCheck` | Run one registry-declared check with a source basis, resource budget, and bounded result schema. |
+| `RequestModelJudgment.AuthorRedTests` | Request only the RED-test proposal leaf. |
+| `RequestModelJudgment.AuthorMinimalFix` | Request only the scoped fix-proposal leaf. |
+| `RequestModelJudgment.ClassifyFinding` | Request only the finding-classification leaf. |
+| `RequestModelJudgment.SummarizeIntent` | Request only the summary leaf. |
+| `RequestModelJudgment.AssessDiffIntent` | Request only the diff-assessment leaf. |
+| `RequestModelJudgment.SelectTieTask` | Request only the tied-task leaf. |
 | `PersistRunState` | Atomically persist the next canonical machine state. |
 
-There is no effect named `ForcePush`, `PushMain`, `Rebase`,
+There is no operation named `ForcePush`, `PushMain`, `Rebase`,
 `RewritePublishedHistory`, `AdminMerge`, `ModifyCiWorkflow`,
 `ResolveHumanThread`, `CloseHumanIssue`, `GenericShell`, or
 `AmbientNetwork`.
+
+Every external operation follows:
+
+```text
+REQUESTED
+  -> CLAIMED
+  -> SETTLED(succeeded | rejected | failed | outcome_unknown)
+```
+
+The request commits before adapter execution. The settlement commits before
+the program consumes it. Replay reads an existing settlement and never creates
+a new claim for a settled request. An intentional fork that consults the
+current world creates a new worldline and request identity.
 
 ## State and effect table
 
@@ -331,55 +363,55 @@ every successful transition and is the only effect shared by all states.
 
 | State | Declared effects | Success condition |
 | --- | --- | --- |
-| `B01_REMOTE_REPOSITORY` | `GitHubRead`, optionally `GitHubRepositoryCreate` | Correct repository exists or creation succeeded. |
-| `B02_LOCAL_REPOSITORY` | `RepoRead`, optionally `RepoCreate` | Local history is preserved or a new repository exists. |
-| `B03_REMOTE_BINDING` | `RepoRead` | `origin` is exact; mismatch escalates. |
-| `B04_REQUIRED_FILES` | `RepoRead`, `FileCreateMissing`, `GitStageExplicit`, `GitCommit` | Every required file exists without overwrite. |
-| `B05_LABELS` | `GitHubRead`, `GitHubMetadataWrite` | Required labels exist. |
-| `B06_BOOTSTRAP_PUBLICATION` | `RepoRead` | Existing remote `main` is usable; a required direct-main push escalates. |
-| `B07_PROTECTION` | `GitHubRead` | Review policy and solo-maintainer posture are recorded. |
-| `L10_BACKLOG` | `GitHubRead`, `GitHubMetadataWrite`, `GitHubDependencyGraphQLWrite` | Routed deduplicated backlog and tracking issues are current. |
-| `L11_ROADMAP` | `GitHubRead`, `GitHubMetadataWrite` | Total milestone order exists and dependency graph is acyclic. |
-| `L12_SELECT_TASK` | `GitHubRead` | Zero, one, or tied critical candidates are classified. |
-| `J13_SELECT_TIE` | `ModelCall.SelectTieTask` | Returned issue is exactly one supplied candidate. |
-| `T20_FETCH_BASE` | `GitFetch`, `RepoRead` | `origin/main` object identity is pinned. |
-| `T21_TASK_PRECONDITIONS` | `RepoRead`, `GitHubRead` | Tree clean, auth valid, refs current, route unique. |
-| `T22_CREATE_BRANCH` | `GitCreateFeatureBranch` | Exact policy branch points at pinned base. |
-| `J30_AUTHOR_RED` | `ModelCall.AuthorRedTests` | Test patch schema and declared coverage are valid. |
-| `P31_APPLY_RED` | `FilePatch` | Patch touches test-allowed paths only. |
-| `P32_COMMIT_RED` | `ModelCall.SummarizeIntent`, `GitStageExplicit`, `GitCommit` | Explicit test paths committed. |
-| `P33_VERIFY_RED` | `RunRepositoryCommand`, `RepoRead` | Suite fails for intended assertion, not compile/setup failure. |
-| `J34_AUTHOR_FIX` | `ModelCall.AuthorMinimalFix` | Fix patch schema and attenuation validate. |
-| `P35_APPLY_FIX` | `FilePatch` | Only current remediation paths change. |
-| `P36_VERIFY_GREEN` | `RunRepositoryCommand`, `RepoRead` | RED suite and relevant regression suite pass. |
-| `P37_COMMIT_GREEN` | `ModelCall.SummarizeIntent`, `GitStageExplicit`, `GitCommit` | Explicit implementation paths committed. |
-| `P38_RECONCILE_DOCS` | `RunRepositoryCommand`, `RepoRead` | Checked doc projection is current or produces named RED evidence. |
-| `P39_COMMIT_DOCS` | `ModelCall.SummarizeIntent`, `GitStageExplicit`, `GitCommit` | Explicit doc paths committed separately. |
-| `P40_CHANGELOG` | `FilePatch` | One normalized `Unreleased` entry exists. |
-| `P41_COMMIT_CHANGELOG` | `ModelCall.SummarizeIntent`, `GitStageExplicit`, `GitCommit` | Changelog path committed separately. |
-| `J42_ASSESS_DIFF` | `ModelCall.AssessDiffIntent` | Typed assessment validates for current `HEAD`. |
-| `J43_CLASSIFY_FINDINGS` | `ModelCall.ClassifyFinding` | Every finite finding has one valid classification. |
+| `B01_REMOTE_REPOSITORY` | `ObserveGitHubState`, optionally `CreateConfiguredRepository` | Correct repository exists or creation succeeded. |
+| `B02_LOCAL_REPOSITORY` | `ObserveRepositorySnapshot`, optionally `CreateRepositoryScaffold` | Local history is preserved or a new repository exists. |
+| `B03_REMOTE_BINDING` | `ObserveRepositorySnapshot` | `origin` is exact; mismatch escalates. |
+| `B04_REQUIRED_FILES` | `ObserveRepositorySnapshot`, `CreateMissingScaffoldFile`, `CreateCommitFromExplicitPaths` | Every required file exists without overwrite. |
+| `B05_LABELS` | `ObserveGitHubState`, `EnsureRequiredLabels` | Required labels exist. |
+| `B06_BOOTSTRAP_PUBLICATION` | `ObserveRepositorySnapshot` | Existing remote `main` is usable; a required direct-main push escalates. |
+| `B07_PROTECTION` | `ObserveGitHubState` | Review policy and solo-maintainer posture are recorded. |
+| `L10_BACKLOG` | `ObserveGitHubState`, `CreateOrUpdateTrackedIssue`, `SetIssueDependency` | Routed deduplicated backlog and tracking issues are current. |
+| `L11_ROADMAP` | `ObserveGitHubState`, `AssignMilestone` | Total milestone order exists and dependency graph is acyclic. |
+| `L12_SELECT_TASK` | `ObserveGitHubState` | Zero, one, or tied critical candidates are classified. |
+| `J13_SELECT_TIE` | `RequestModelJudgment.SelectTieTask` | Returned issue is exactly one supplied candidate. |
+| `T20_FETCH_BASE` | `FetchPinnedBase`, `ObserveRepositorySnapshot` | `origin/main` object identity is pinned. |
+| `T21_TASK_PRECONDITIONS` | `ObserveRepositorySnapshot`, `ObserveGitHubState` | Tree clean, auth valid, refs current, route unique. |
+| `T22_CREATE_BRANCH` | `CreateFeatureBranch` | Exact policy branch points at pinned base. |
+| `J30_AUTHOR_RED` | `RequestModelJudgment.AuthorRedTests` | Test proposal schema and declared coverage are valid. |
+| `P31_APPLY_RED` | `ApplyValidatedPatch` | Validated patch touches test-allowed paths only. |
+| `P32_COMMIT_RED` | `RequestModelJudgment.SummarizeIntent`, `CreateCommitFromExplicitPaths` | Explicit test paths committed. |
+| `P33_VERIFY_RED` | `RunRegisteredCheck`, `ObserveRepositorySnapshot` | Suite fails for intended assertion, not compile/setup failure. |
+| `J34_AUTHOR_FIX` | `RequestModelJudgment.AuthorMinimalFix` | Fix proposal schema and policy validate. |
+| `P35_APPLY_FIX` | `ApplyValidatedPatch` | Only current remediation paths change. |
+| `P36_VERIFY_GREEN` | `RunRegisteredCheck`, `ObserveRepositorySnapshot` | RED suite and relevant regression suite pass. |
+| `P37_COMMIT_GREEN` | `RequestModelJudgment.SummarizeIntent`, `CreateCommitFromExplicitPaths` | Explicit implementation paths committed. |
+| `P38_RECONCILE_DOCS` | `RunRegisteredCheck`, `ObserveRepositorySnapshot` | Checked doc projection is current or produces named RED evidence. |
+| `P39_COMMIT_DOCS` | `RequestModelJudgment.SummarizeIntent`, `ApplyValidatedPatch`, `CreateCommitFromExplicitPaths` | Explicit doc paths committed separately. |
+| `P40_CHANGELOG` | `ApplyValidatedPatch` | One normalized `Unreleased` entry exists. |
+| `P41_COMMIT_CHANGELOG` | `RequestModelJudgment.SummarizeIntent`, `CreateCommitFromExplicitPaths` | Changelog path committed separately. |
+| `J42_ASSESS_DIFF` | `RequestModelJudgment.AssessDiffIntent` | Typed assessment validates for current `HEAD`. |
+| `J43_CLASSIFY_FINDINGS` | `RequestModelJudgment.ClassifyFinding` | Every finite finding has one valid classification. |
 | `P44_REMEDIATE` | None | Deterministic severity route selected and attempt consumed. |
-| `P45_PHASE1_ACCEPTED` | `RepoRead` | Current `HEAD` has no finding above P4 requiring action. |
-| `R50_PUSH` | `GitPushFeature` | Remote feature ref equals current `HEAD`. |
-| `R51_CREATE_PR` | `ModelCall.SummarizeIntent`, `GitHubCreatePullRequest` | Open PR targets configured main and closes exact issue. |
-| `R52_REQUEST_REVIEW` | `GitHubRequestBotReview` | Both fixed requests recorded. |
-| `R53_WAIT_REVIEW` | `GitHubRead`, `ClockReadWitnessed` | Both reviewers meet a completion rule or deadline. |
-| `R54_CODE_LAWYER_INTAKE` | `GitHubRead` | Queue contains only unresolved bot threads for current head. |
-| `J55_ASSESS_THREADS` | `ModelCall.AssessDiffIntent`, `ModelCall.ClassifyFinding` | Every queued thread has evidence and classification. |
-| `R56_APPLY_THREAD_FIX` | `ModelCall.AuthorMinimalFix`, `FilePatch`, `RunRepositoryCommand`, `GitStageExplicit`, `GitCommit`, `GitPushFeature` | Valid finding fixed and tested on feature ref. |
-| `R57_RESOLVE_BOT_THREADS` | `GitHubMetadataWrite`, `GitHubResolveBotThread` | Reply records outcome; bot thread resolved. |
-| `R58_CODE_LAWYER_RECHECK` | `GitHubRead` | No new bot thread, or one remaining pass is selected. |
-| `G60_MERGE_GATE` | `GitHubRead`, `RepoRead`, `RunRepositoryCommand` | Five ordered gate predicates are true. |
-| `G61_GATE_REMEDIATION` | `GitHubRead`, `RepoRead`, `RunRepositoryCommand`, `ClockReadWitnessed` | First closure is re-observed once without mutation. |
-| `G62_MERGE` | `GitHubMergePullRequest` | Gated PR merged without admin. |
-| `S70_SYNC_MAIN` | `GitSwitchMain`, `GitPullFastForward` | Local merge target equals remote target. |
-| `S71_PRUNE` | `GitFetch`, `GitPrune` | Deleted remote feature ref is absent. |
-| `S72_DELETE_LOCAL_BRANCH` | `GitDeleteMergedLocalBranch` | Safe ancestry proof succeeds; otherwise branch is preserved and recorded. |
-| `S73_VERIFY_ISSUE` | `GitHubRead`, conditionally `GitHubMetadataWrite` | Task issue closed with merge evidence. |
-| `S74_VERIFY_CLEAN` | `RepoRead` | Worktree has no tracked or untracked change. |
-| `S75_NEXT` | `GitHubRead` | Terminal or next-backlog transition selected. |
-| `F80_FINALIZE_BUDGET` | `RepoRead`, conditionally `GitPushFeature` | Current commit pushed and worktree clean. |
+| `P45_PHASE1_ACCEPTED` | `ObserveRepositorySnapshot` | Current `HEAD` has no finding above P4 requiring action. |
+| `R50_PUSH` | `PushFeatureRef` | Remote feature ref equals current `HEAD`. |
+| `R51_CREATE_PR` | `RequestModelJudgment.SummarizeIntent`, `OpenTaskPullRequest` | Open PR targets configured main and closes exact issue. |
+| `R52_REQUEST_REVIEW` | `RequestFixedBotReviews` | Both fixed requests recorded. |
+| `R53_WAIT_REVIEW` | `ObserveGitHubState`, `ObserveTimerSettlement` | Both reviewers meet a completion rule or deadline. |
+| `R54_CODE_LAWYER_INTAKE` | `ObserveGitHubState` | Queue contains only unresolved bot threads for current head. |
+| `J55_ASSESS_THREADS` | `RequestModelJudgment.AssessDiffIntent`, `RequestModelJudgment.ClassifyFinding` | Every queued thread has evidence and classification. |
+| `R56_APPLY_THREAD_FIX` | `RequestModelJudgment.AuthorMinimalFix`, `ApplyValidatedPatch`, `RunRegisteredCheck`, `CreateCommitFromExplicitPaths`, `PushFeatureRef` | Valid finding fixed and tested on feature ref. |
+| `R57_RESOLVE_BOT_THREADS` | `ReplyToBotThread`, `ResolveBotThread` | Reply records outcome; bot thread resolved. |
+| `R58_CODE_LAWYER_RECHECK` | `ObserveGitHubState` | No new bot thread, or one remaining pass is selected. |
+| `G60_MERGE_GATE` | `ObserveGitHubState`, `ObserveRepositorySnapshot`, `RunRegisteredCheck` | Five ordered gate predicates are true. |
+| `G61_GATE_REMEDIATION` | `ObserveGitHubState`, `ObserveRepositorySnapshot`, `RunRegisteredCheck`, `ObserveTimerSettlement` | First closure is re-observed once without mutation. |
+| `G62_MERGE` | `MergeGatedPullRequest` | Gated PR merged without admin. |
+| `S70_SYNC_MAIN` | `SyncMainFastForward` | Local merge target equals remote target. |
+| `S71_PRUNE` | `PruneRemoteRefs` | Deleted remote feature ref is absent. |
+| `S72_DELETE_LOCAL_BRANCH` | `DeleteOrdinarilyMergedBranch` | Safe ancestry proof succeeds; otherwise branch is preserved and recorded. |
+| `S73_VERIFY_ISSUE` | `ObserveGitHubState`, conditionally `CloseMergedTaskIssue` | Task issue closed with merge evidence. |
+| `S74_VERIFY_CLEAN` | `ObserveRepositorySnapshot` | Worktree has no tracked or untracked change. |
+| `S75_NEXT` | `ObserveGitHubState` | Terminal or next-backlog transition selected. |
+| `F80_FINALIZE_BUDGET` | `ObserveRepositorySnapshot`, conditionally `PushFeatureRef` | Current commit pushed and worktree clean. |
 | `MERGED` | None | Terminal success record emitted. |
 | `ESCALATED` | None | Terminal escalation record emitted. |
 | `BUDGET_EXHAUSTED` | None | Terminal budget record emitted. |
@@ -387,9 +419,10 @@ every successful transition and is the only effect shared by all states.
 ## Transition table
 
 `fail(reason)` means a committed transition to `ESCALATED` with the exact
-record format. A failed external effect never advances or silently retries the
-phase; unless a transition names a bounded retry counter, it records evidence
-and transitions to `ESCALATED`.
+record format. A rejected or failed external settlement never advances or
+silently retries the phase. An ambiguous effect becomes `outcome_unknown`; it
+is not collapsed into failure. Unless a transition names a bounded retry
+counter, it records evidence and transitions to `ESCALATED`.
 
 | From | Guard | To | Counter change or failure |
 | --- | --- | --- | --- |
@@ -475,8 +508,8 @@ AuthorRedTests(
   repository: PinnedRepositorySnapshot,
   acceptance: AcceptanceCriteria,
   constraints: TestConstraints,
-  writable_paths: ExactPathSet
-) -> TestPatch {
+  proposable_paths: ExactPathSet
+) -> TestPatchProposal {
   patch,
   cases: {
     golden: NonEmpty<TestCaseId>,
@@ -488,9 +521,10 @@ AuthorRedTests(
 }
 ```
 
-The leaf receives no Git, network, GitHub, process, or unrestricted filesystem
-capability. A path outside `writable_paths`, a missing fixed seed, an unbounded
-stress case, or a CI-workflow path is malformed.
+The leaf receives no Git, network, GitHub, process, or filesystem-write
+capability. A path outside `proposable_paths`, a missing fixed seed, an
+unbounded stress case, or a CI-workflow path is malformed. Deterministic law
+validates the proposal before Echo may admit an `ApplyValidatedPatch` request.
 
 ### `AuthorMinimalFix`
 
@@ -500,17 +534,19 @@ AuthorMinimalFix(
   repository: PinnedRepositorySnapshot,
   red_evidence: NonEmpty<FailureEvidence>,
   current_diff: CanonicalDiff,
-  writable_paths: ExactPathSet
-) -> FixPatch {
+  proposable_paths: ExactPathSet
+) -> PatchProposal {
   patch,
   addressed_evidence: NonEmpty<EvidenceId>
 }
 ```
 
-The host applies the patch. The leaf cannot invoke Git, a shell, GitHub, the
-network, or another model. The writable set is the deterministic intersection
-of task scope, current diff scope, repository policy, and affected-document
-projection.
+The leaf cannot invoke Git, a shell, GitHub, the network, another model, or a
+filesystem write. The admissible proposal set is the deterministic
+intersection of task scope, current diff scope, repository policy, and
+affected-document projection. Deterministic law validates the proposal against
+the current basis. Echo then records an `ApplyValidatedPatch` request before a
+workspace adapter performs the mutation.
 
 ### `ClassifyFinding`
 
@@ -634,40 +670,50 @@ Every non-terminal state has a path to a terminal:
    machine reaches `BUDGET_EXHAUSTED` after clean/pushed finalization.
 8. A completed authorized scope reaches `MERGED`. Scope can end because the
    active roadmap is complete or because a directive requires a successful
-   stop after a named deliverable. For this run, the D1
-   `not-yet-hostable` verdict sets `stop_condition = after D2`. An incomplete
-   scope with no unblocked task reaches `ESCALATED` with its blocking set.
+   stop after a named deliverable. For the discovery run, D1's
+   `not-yet-hostable` verdict requires blocker filing, D2, and then a stop. An
+   incomplete scope with no unblocked task reaches `ESCALATED` with its
+   blocking set.
 
 No legal cycle lacks a strictly decreasing finite measure.
 
 ## Defects exposed in the prose loop
 
-1. **Bootstrap contradiction.** Creating an empty remote and then publishing
+1. **Missing external-interaction category.** The original deterministic versus
+   judgment split misclassified filesystem, process, Git, GitHub, network,
+   timer, and model calls. Those operations are mechanical but depend on an
+   external world. They require recorded requests and witnessed settlements.
+2. **Bootstrap contradiction.** Creating an empty remote and then publishing
    the initial commit requires a direct push to `main`, but the autonomy
    envelope forbids direct main pushes. The machine escalates rather than
    inventing an exception. Existing repositories skip this path.
-2. **Missing review protocols.** `.agent/self-code-review.md` and
+3. **Missing review protocols.** `.agent/self-code-review.md` and
    `.agent/code-lawyer.md` are not present in the current Hello Echo or Graft
    repository. A future runtime must consume digest-bound protocol artifacts;
    absent artifacts fail closed. This specification uses only the deltas
    explicitly present in the operative prompt.
-3. **Undefined roadmap order storage.** GitHub milestone numbers do not by
+4. **Undefined roadmap order storage.** GitHub milestone numbers do not by
    themselves encode the requested capability order. `roadmap_order` must be an
    explicit total order; absence or conflict escalates.
-4. **CI wait ambiguity.** The prompt bounds bot wait but not a free-running CI
+5. **CI wait ambiguity.** The prompt bounds bot wait but not a free-running CI
    wait. The phase graph permits only the one gate re-observation implied by
    "the same criterion twice"; a second CI closure escalates.
-5. **Documentation authorship tension.** The judgment whitelist has no general
+6. **Documentation authorship tension.** The judgment whitelist has no general
    prose-authoring leaf. Documentation changes must be a path-attenuated
-   `AuthorMinimalFix` response to deterministic corpus RED evidence, or the task
-   escalates.
-6. **Squash cleanup mismatch.** Safe local branch deletion may reject a
+   `AuthorMinimalFix` proposal in response to deterministic corpus RED evidence.
+   The proposal is validated before an adapter receives an
+   `ApplyValidatedPatch` request.
+7. **Squash cleanup mismatch.** Safe local branch deletion may reject a
    squash-merged branch because ancestry differs. Force deletion is absent, so
    the machine preserves and reports that local branch.
-7. **Administrative merge override.** The current operator allowed this agent
+8. **Administrative merge override.** The current operator allowed this agent
    to use `--admin`; the requested target negative tests still classify
    `AdminMerge` as forbidden. The target policy remains the stricter one until
    the pivot directive is explicitly changed.
+9. **Blocker-filing order.** D1 can discover that the seam is not hostable. A
+   stop immediately after D2 would skip the issue and dependency reconciliation
+   needed to preserve those blockers. Blocker filing therefore occurs between
+   D1 and D2; D3-D5 implementation still stops.
 
 ## Escalation record
 
@@ -692,7 +738,9 @@ phase, attempts, evidence identifiers, or requested decision.
 - `BUDGET_EXHAUSTED`: eight completed task iterations have been consumed and
   the final feature commit is pushed with a clean worktree.
 
-Because D1 is `not-yet-hostable`, this committed phase graph is the final
-deliverable for the current pivot. D3 through D6 must not begin in this run.
+Because D1 is `not-yet-hostable`, this phase graph and the intervening blocker
+filing are the final discovery artifacts. D3-D5 delivery-loop implementation
+does not begin. `docs/roadmap.md` restores Pure Hello Echo as Roadmap A and
+moves this machine to Roadmap Ω.
 
 <!-- markdownlint-enable MD013 -->

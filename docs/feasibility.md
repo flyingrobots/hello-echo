@@ -18,15 +18,18 @@ not a general effect host. It can:
 4. execute the package's anchored-node attachment operation through
    scheduler-owned Actions and durable Ticks.
 
-The delivery loop requires process, filesystem, network, Git, GitHub, and model
-effects plus durable suspension while external work completes. None is exposed
-to an Edict program. Adding them requires a language-level effect-capability
-model, attenuated host adapters, and a durable external-effect continuation
-protocol. Those are genuine architecture gaps, not additional provider roles
-or small target-lowering extensions.
+The delivery loop requires process, filesystem, network, Git, GitHub, timer,
+and model interactions plus durable waiting while external work completes.
+None is exposed to an Edict program. Adding them does not require callable
+imports in Edict or in the provider world. It requires typed request values
+declared in the application closure, durable request/claim/settlement history
+owned by Echo, narrow effect adapters, and witnessed settlement ingress.
 
-No delivery-loop implementation may begin on this seam. The next permitted
-artifact is the syntax-independent phase graph in `docs/phase-graph.md`.
+Those are genuine architecture gaps, not additional provider roles or small
+target-lowering extensions. The required follow-up to this feasibility result
+is blocker filing and the syntax-independent phase graph in
+`docs/phase-graph.md`. No full delivery-loop implementation may begin on this
+seam.
 
 ## Current seam
 
@@ -63,7 +66,7 @@ The resulting Action path is durable: acknowledgement follows accepted-action
 WAL commit, scheduler construction owns private evaluation, a decided Tick is
 committed before publication, and restart reconstructs retained outcomes. That
 durability is reusable infrastructure, but the retained state is an Echo Action
-and Tick, not a suspended external-effect continuation.
+and Tick, not an explicit external request, claim, settlement, or waiting state.
 
 Evidence:
 
@@ -96,13 +99,13 @@ Evidence:
 
 | Delivery-loop operation | Exposed to Edict now | Gap class | Required extension |
 | --- | --- | --- | --- |
-| Process spawn | No | Genuine gap | A typed process capability with executable identity, argv, environment, working-directory, resource, and output bounds; an Echo-owned effect adapter; durable request/result evidence. |
-| Filesystem read | No | Genuine gap | A read capability attenuated to canonical roots and byte limits, with symlink and race semantics specified; witnessed bytes and metadata returned as canonical input. |
-| Filesystem write | No | Genuine gap | A write capability attenuated to an explicit path set and operation class, with atomicity, overwrite, CI-workflow exclusion, and durable outcome semantics. |
-| Network egress | No | Genuine gap | A destination-, protocol-, credential-, request-, and response-bounded network capability plus a durable asynchronous effect adapter. |
-| Git invocation | No | Genuine gap | Typed Git operations over an identified repository and ref policy. Raw shell access cannot encode the no-force, no-rebase, no-main-push envelope. |
-| GitHub API | No | Genuine gap | Typed REST/GraphQL capabilities scoped by repository and mutation class, including native issue-dependency operations, authentication isolation, idempotency, rate-limit results, and durable polling. |
-| Model invocation | No | Genuine gap | A typed model-call operation whose prompt/input scope is explicit, whose output is untrusted bytes, and whose result must pass a declared schema before any transition can consume it. |
+| Process spawn | No | Genuine gap | Domain operations such as `RunRegisteredCheck`; a registry binds the operation to executable identity, environment, working directory, resource bounds, and result schema below the protocol. |
+| Filesystem read | No | Genuine gap | `ObserveWorkspaceSnapshot` or a smaller read operation with bounded paths and bytes, symlink and race semantics, basis identity, and witnessed result data. |
+| Filesystem write | No | Genuine gap | `ApplyValidatedPatch` over an admitted patch, exact basis, and explicit path set, with atomicity, postcondition, and ambiguous-outcome semantics. |
+| Network egress | No | Genuine gap | Operation-specific adapters with fixed destination, protocol, credentials, request schema, response bounds, idempotency, and settlement law. No ambient network operation. |
+| Git invocation | No | Genuine gap | Domain operations such as `PushFeatureRef` over an admitted repository, expected remote basis, feature ref, and commit. No arbitrary Git argv or force flag. |
+| GitHub API | No | Genuine gap | Domain operations such as `OpenPullRequest` and `ObservePullRequestChecks`, each with repository scope, mutation class, idempotency, reconciliation, and durable settlement. |
+| Model invocation | No | Genuine gap | `RequestModelJudgment` with explicit input and output schemas. Output is untrusted proposal data and carries no filesystem, Git, GitHub, process, or network authority. |
 
 <!-- markdownlint-enable MD013 -->
 
@@ -111,17 +114,17 @@ can be added by linking a convenience host function into the current provider
 world. Doing so would collapse the compiler-verification authority boundary.
 They require a separate admitted runtime-effect contract.
 
-## Suspension and resumption
+## Waiting and resumption
 
-An Edict provider call cannot suspend on an external result. Its only legal
+An Edict provider call cannot wait on an external result. Its only legal
 completion is a full lowerer/verifier result or a bounded host failure. There is
-no await token, continuation identity, effect-request record, callback import,
-or host entry point that resumes a prior store.
+no effect-request record, callback import, or host entry point that resumes a
+prior store.
 
 Echo can recover accepted pending Actions and decided Ticks after process loss.
-It does not currently persist an Edict continuation at an effect boundary or
-correlate an external response with such a continuation. CI and review polling
-therefore cannot be expressed as a safe hosted wait.
+It does not currently persist an explicit program state waiting for an effect
+request or correlate an external settlement with that request. CI and review
+polling therefore cannot be expressed as a safe hosted wait.
 
 Minimum state required of the extension:
 
@@ -129,16 +132,19 @@ Minimum state required of the extension:
 EffectRequested {
   run_id,
   transition_id,
-  effect_id,
+  request_id,
+  operation_identity,
   adapter_idempotency_key,
   program_binding_digest,
-  capability,
-  canonical_request,
-  request_digest
+  authority_scope,
+  basis,
+  budget,
+  canonical_input,
+  input_digest
 }
 
 EffectDispatchClaimed {
-  effect_id,
+  request_id,
   attempt,
   adapter_id,
   lease_owner,
@@ -146,64 +152,65 @@ EffectDispatchClaimed {
   witnessed_lease_deadline
 }
 
-EffectCompleted | EffectFailed {
-  effect_id,
+EffectSettled {
+  request_id,
+  attempt,
+  disposition: succeeded | rejected | failed | outcome_unknown,
   adapter_idempotency_key,
   program_binding_digest,
-  canonical_result,
-  result_digest
+  canonical_outcome,
+  outcome_digest
 }
 
-EffectOutcomeUnknown {
-  effect_id,
-  attempt,
-  reason
-}
-
-SuspendedContinuation {
+AwaitingEffect {
   program_binding_digest,
   state_schema,
   canonical_state,
   next_transition,
-  awaited_effect_id
+  awaited_request_id
 }
 ```
 
 `program_binding_digest` must immutably bind the admitted program, exact
-capability set, authority policy, and continuation-state schema. `effect_id` is
+capability set, authority policy, and program-state schema. `request_id` is
 also the adapter-visible idempotency key unless an adapter declares a separate
 stable key. A dispatch claim and its attempt number must commit before the
 adapter is called. Lease expiry is not inferred from ambient time; the host
 records the time or scheduler evidence used to authorize a new claim.
 
 Recovery must enqueue a committed request with no dispatch claim. A claimed
-request with no completion remains owned until its witnessed lease expires.
+request with no settlement remains owned until its witnessed lease expires.
 After expiry, recovery may retry only a read-only effect or an adapter that
 guarantees idempotency for the same key. Otherwise it records
-`EffectOutcomeUnknown` and takes the first-class escalation transition; it must
+`EffectSettled(disposition = outcome_unknown)` and takes the first-class
+escalation transition; it must
 not guess whether a Git push, GitHub mutation, process, or filesystem write
 occurred.
 
-A completion must commit before the transition resumes and must match the exact
-effect id, idempotency key, program binding, request, adapter, attempt policy,
-and result schema. Duplicate completion, unknown correlation, changed program
-or capability identity, stale state schema, noncanonical result, and a result
-from an unauthorized adapter must fail closed.
+A settlement must commit before the transition resumes and must match the exact
+request id, idempotency key, program binding, input, adapter, attempt policy,
+and outcome schema. Duplicate settlement, unknown correlation, changed program
+or capability identity, stale state schema, noncanonical outcome, and an
+outcome from an unauthorized adapter must fail closed.
 
-## Effect capability representation
+The waiting state is ordinary canonical program state plus admitted history. It
+is not a serialized native stack, hidden callback, or language-level
+`async`/`await` continuation.
 
-Edict has capability-related data, but not the capability type system required
-by the loop:
+## Request capability representation
+
+Edict has capability-related data, but not the typed request construction
+required by an external-action protocol:
 
 - `CapabilityRef<T>` is an inert receipt reference until admission;
 - admission records can require matching capability evidence;
 - `use capability` is explicitly rejected by the v1 parser; and
 - the current provider component receives no callable capability.
 
-These mechanisms bind evidence and prevent ambient input. They do not make
-`FsWrite<Paths>`, `GitPush<NonMainRef>`, or
-`GitHubMutation<Repository, OperationSet>` available as compiler-checked
-effects, and they cannot attenuate authority passed to a judgment leaf.
+These mechanisms bind evidence and prevent ambient input. They do not let an
+application declare and construct a typed external request whose operation
+identity, input schema, output schema, scope, basis, and budget are preserved
+through Core and package closure.
 
 Evidence:
 
@@ -211,30 +218,39 @@ Evidence:
 - [Capability imports are rejected in v1](https://github.com/flyingrobots/edict/blob/296bf1f6c76af1e011f5214b6d3de260c67ca84a/crates/edict-syntax/src/parser.rs#L478-L495)
 - [Hidden effects require explicit canonical or admitted input](https://github.com/flyingrobots/edict/blob/296bf1f6c76af1e011f5214b6d3de260c67ca84a/docs/REQUIREMENTS.md#L83-L86)
 
-A new language and Core representation is required:
+A minimal language and Core representation may be substantially smaller than a
+general-purpose algebraic-effect system:
 
 ```text
-effect capability Cap<Scope, Operations, Limits>
-operation op : (Cap<...>, Input) -> Effect<Result, Failure>
+external operation Op<Input, Settlement>
+request op(input, authority_scope, basis, budget)
+  -> EffectRequest<Op, Settlement>
 ```
 
-Capability construction remains host-owned. An Edict program may only receive,
-attenuate, and consume declared capabilities. Capability absence, an
-out-of-scope path, a forbidden Git ref, or an undeclared network destination
-must be rejected before execution. Runtime validation remains necessary for
-race-dependent facts such as the actual resolved filesystem object and remote
-ref state.
+The package closure determines which operation families the program may
+request. Absence from that closure is a compile-time or package-verification
+failure. Echo admission validates dynamic request instances such as resolved
+paths, refs, bases, budgets, and adapter identity before execution. An adapter,
+not the Edict program, owns the credential or operating-system capability.
+
+Judgment calls follow the same split. A model returns a schema-bound proposal.
+Deterministic law validates it. Only then may Echo admit an operation-specific
+request for an adapter to perform. The model never receives write authority.
 
 ## Named blockers
 
-1. **Edict effect-capability types.** Add declared effect capabilities,
-   operation sets, static attenuation, and Core preservation.
-2. **Durable external-effect protocol.** Add explicit request, suspended-state,
-   completion, idempotency, and recovery records to the Echo-hosted lifecycle.
-3. **Attenuated host adapters.** Add typed filesystem, process, Git, and
-   network/GitHub adapters without granting a generic shell or ambient network.
-4. **Schema-validated judgment calls.** Add a model-call effect whose output is
-   untrusted until canonical schema admission succeeds.
+1. **Joint Edict/Echo boundary RFC.** Define operation identity, request
+   construction, package closure, request admission, claim, settlement,
+   correlation, idempotency, reconciliation, and replay law before code.
+2. **Edict typed request values.** Preserve declared external-operation
+   identities and request schemas through syntax, Core, and package closure
+   without adding provider imports or ambient authority.
+3. **Echo durable external-action protocol.** Commit requests before adapter
+   execution, settlements before program resumption, and explicit waiting state
+   for recovery.
+4. **One narrow adapter proof.** Prove bounded read-only workspace observation
+   before basis-bound patch application and before process, Git, GitHub, or
+   model adapters.
 5. **Complete lawpack closure transport.** The current singleton provider
    closure is separately tracked by
    [Echo #693](https://github.com/flyingrobots/echo/issues/693) and
@@ -242,6 +258,6 @@ ref state.
    necessary for general applications but does not by itself supply any
    delivery-loop effect.
 
-The first four blockers are architectural prerequisites. Until they land with
-negative compile-time and seam tests, the self-hosted delivery loop remains a
-specification.
+The first four blockers form a separate cross-repository campaign. The full
+self-hosted delivery loop remains Roadmap Ω. Roadmap A resumes the pure
+compiler-to-runtime Hello Echo witness described by `docs/roadmap.md`.

@@ -9,6 +9,12 @@ Hello Echo is Roadmap A for the Graft-on-Echo campaign. Its complete local
 build, execution, durability, and recovery witness is the prerequisite for
 Roadmap B: writing Graft in Edict and hosting it on Echo.
 
+External workspace effects are introduced only after that pure runtime proof.
+The [campaign roadmap](docs/roadmap.md) orders bounded workspace observation,
+basis-bound patch application, Graft hosting, Git and GitHub adapters, and the
+self-hosted delivery loop. The delivery loop is Roadmap Ω, not Hello Echo's
+bootstrap workload.
+
 ## Build and test
 
 Set `EDICT_REPO` and `ECHO_REPO` to compatible local feature-branch checkouts,
