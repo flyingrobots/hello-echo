@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Standalone Hello Echo Edict source, pinned `causal.cell@1` capability closure,
   and deterministic build for compiler-produced Echo package and verification
   report artifacts.
+- Durable singleton runtime witness covering WAL-before-ack submission,
+  scheduler-owned evaluation, restart recovery, typed duplicate obstruction,
+  altered-basis refusal, fixed-seed input cases, and bounded stress.
 - Delivery-loop hosting feasibility report against the current Edict-to-Echo
   seam.
 - Syntax-independent delivery-loop phase graph with guarded transitions,
