@@ -74,6 +74,11 @@ Prove the existing compiler and runtime seam without external effects:
 Roadmap A ends when the standalone witness passes without a runtime fake,
 native application callback, handwritten package, or host-checkout path.
 
+The standalone witness now covers all seven steps with one Action in one Tick.
+That is a singleton scheduler proof, not a claim that the permanent
+multi-Action Tick model is complete. Roadmap A.1 begins only after the runtime
+witness lands on `main`.
+
 ## Roadmap A.1 — Hello Effect
 
 Prove one external boundary before generalizing it.
