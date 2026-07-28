@@ -1,0 +1,20 @@
+{
+  "schema": "edict.application/v1",
+  "coordinate": "examples.hello_echo@1",
+  "sources": [
+    "src/hello_echo.edict"
+  ],
+  "lawpacks": [
+    {
+      "manifest": "vendor/causal-cell/manifest.cbor",
+      "exports": "vendor/causal-cell/exports.cbor",
+      "adapter": "vendor/causal-cell/adapter.cbor",
+      "targetConfiguration": "vendor/causal-cell/echo-operation-configuration.cbor"
+    }
+  ],
+  "target": {
+    "profile": "echo.dpo@1",
+    "providerPackage": ".build/echo-provider"
+  },
+  "outputDirectory": ".build/application"
+}
