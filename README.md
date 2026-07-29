@@ -75,7 +75,11 @@ The structured witness proves:
 - one scheduler-selected Action in one atomic Tick;
 - decided-Tick recovery of Action, Tick, state, outcome, and Receipt by
   reopening that persisted WAL in another fresh host;
-- successful greeting state derived from typed input;
+- the exact package-declared
+  `examples.hello_echo@1.GreetingCreated { key, message }` result as canonical
+  evidence, including independent equality of the applied, fresh-host, and
+  WAL-recovered generic result records without native reconstruction;
+- successful greeting state derived from the same typed input;
 - package-declared `causal.cell@1.AlreadyExists` obstruction on duplicate
   creation, with equal canonical application-state roots and typed target-value
   digests independently demonstrating no hidden mutation;

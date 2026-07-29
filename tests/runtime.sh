@@ -15,8 +15,9 @@ mkdir -p "$runtime_root"
 package_file=.build/application/executable-operation-package.cbor
 verification_report_file=.build/application/verification-report.cbor
 lawpack_manifest_file=vendor/causal-cell/manifest.cbor
-expected_package_sha256=67dc6d23e223e78b6aa774a2f57c86db2eff4981ea793975d39c66f731f02fd1
-expected_verification_report_sha256=8a5153b4ec25ebe979f0ceab373d03969e30a64d7973b3a83e3c84877c5aa564
+typed_result_fixtures=tests/typed-result-fixtures.json
+expected_package_sha256=3665d692cdd120f116f18067f2fd583e841448d057b5e35515f57264f853d0f6
+expected_verification_report_sha256=2541c8263d95fdad52f4f5a3bbfed48fdefd9f20969156c3c3fd56be912b66dd
 expected_lawpack_manifest_sha256=7bb901c984a92ed50795f8b5f7efe8d0648124574fa82250c6373a30e94333c9
 
 sha256_file() {
@@ -55,6 +56,12 @@ assert_common_witness() {
     --arg lawpack_manifest_sha256 "$lawpack_manifest_sha256" \
     '
     .operation == "examples.hello_echo@1.createGreeting"
+    and .applicationResult.projectionIdentity
+      == "791fb36bb4d42273eb558ce4d03d68d90a678d15891fb9cbe4ad8a20bb56fa82"
+    and .applicationResult.outputType
+      == "examples.hello_echo@1.GreetingCreated"
+    and (.applicationResult.canonicalBytesHex | test("^([0-9a-f]{2})+$"))
+    and (.applicationResult.resultIdentity | test("^[0-9a-f]{64}$"))
     and .artifacts.package.algorithm == "sha256"
     and .artifacts.package.digestHex == $package_sha256
     and .artifacts.verificationReport.algorithm == "sha256"
@@ -69,6 +76,9 @@ assert_common_witness() {
     and .recovery.stateRecovered == true
     and .recovery.outcomeRecovered == true
     and .recovery.receiptRecovered == true
+    and .recovery.applicationResultRecovered == true
+    and .recovery.freshHostApplicationResult == .applicationResult
+    and .recovery.walApplicationResult == .applicationResult
     and .recovery.mutatedInitialStateRefusal == "echo-operation-execution-mismatch/action-basis"
     and .duplicate.obstruction == "causal.cell@1.AlreadyExists"
     and (.duplicate.applicationStateRootBefore | test("^[0-9a-f]{64}$"))
@@ -94,10 +104,23 @@ assert_common_witness() {
   ' "$witness" >/dev/null
 }
 
+assert_typed_result() {
+  witness=$1
+  case_name=$2
+  expected_result=$(jq -e --arg case_name "$case_name" '.[$case_name]' \
+    "$typed_result_fixtures")
+  jq -e \
+    --argjson expected_result "$expected_result" \
+    '.applicationResult.canonicalBytesHex == $expected_result.canonicalBytesHex
+      and .applicationResult.resultIdentity == $expected_result.resultIdentity' \
+    "$witness" >/dev/null
+}
+
 # Golden path: exact compiler output enters the generic durable runner.
 run_case golden tests/create-greeting.json
 golden_witness="$runtime_root/golden/witness.json"
 assert_common_witness "$golden_witness"
+assert_typed_result "$golden_witness" golden
 jq -e '
   .causalSite.basis == "u0"
   and .causalSite.nodeKey == "greeting"
@@ -109,6 +132,12 @@ jq -e '
 # asserted by the recovery fields above.
 run_case deterministic-rerun tests/create-greeting.json
 cmp "$golden_witness" "$runtime_root/deterministic-rerun/witness.json"
+
+# A stale golden result cannot satisfy another case's application-owned fixture.
+if assert_typed_result "$golden_witness" property-1; then
+  echo "golden result unexpectedly satisfied the first property case" >&2
+  exit 1
+fi
 
 # The witness is portable evidence and must not disclose checkout paths.
 edict_repo_root=$(CDPATH='' cd -- "$EDICT_REPO" && pwd -P)
@@ -159,6 +188,7 @@ jq -n --arg value "$(jq -nr '"x" * 256')" \
   >"$runtime_root/maximum-input.json"
 run_case maximum "$runtime_root/maximum-input.json"
 assert_common_witness "$runtime_root/maximum/witness.json"
+assert_typed_result "$runtime_root/maximum/witness.json" maximum
 test "$(jq -r '.state.valueUtf8 | length' "$runtime_root/maximum/witness.json")" -eq 256
 
 jq -n --arg value "$(jq -nr '"x" * 257')" \
@@ -197,6 +227,7 @@ do
   run_case "$property_name" "$property_input"
   property_witness="$runtime_root/$property_name/witness.json"
   assert_common_witness "$property_witness"
+  assert_typed_result "$property_witness" "$property_name"
   jq -e \
     --arg basis "$property_name" \
     --arg key "key-$property_ordinal" \
@@ -221,6 +252,7 @@ while test "$stress_ordinal" -le "$stress_count"; do
     >"$stress_input"
   run_case "$stress_name" "$stress_input"
   assert_common_witness "$runtime_root/$stress_name/witness.json"
+  assert_typed_result "$runtime_root/$stress_name/witness.json" "$stress_name"
   stress_ordinal=$((stress_ordinal + 1))
 done
 
