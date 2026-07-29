@@ -71,6 +71,18 @@ assert_common_witness() {
     and .recovery.receiptRecovered == true
     and .recovery.mutatedInitialStateRefusal == "echo-operation-execution-mismatch/action-basis"
     and .duplicate.obstruction == "causal.cell@1.AlreadyExists"
+    and (.duplicate.applicationStateRootBefore | test("^[0-9a-f]{64}$"))
+    and (.duplicate.applicationStateRootAfter | test("^[0-9a-f]{64}$"))
+    and (
+      .duplicate.applicationStateRootBefore
+      == .duplicate.applicationStateRootAfter
+    )
+    and (.duplicate.targetValueDigestBefore | test("^[0-9a-f]{64}$"))
+    and (.duplicate.targetValueDigestAfter | test("^[0-9a-f]{64}$"))
+    and (
+      .duplicate.targetValueDigestBefore
+      == .duplicate.targetValueDigestAfter
+    )
     and (.causalSite.worldlineId | test("^[0-9a-f]{64}$"))
     and (.causalSite.warpId | test("^[0-9a-f]{64}$"))
     and (.causalSite.nodeId | test("^[0-9a-f]{64}$"))
