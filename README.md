@@ -52,11 +52,44 @@ The build:
    - `.build/application/executable-operation-package.cbor`;
    - `.build/application/verification-report.cbor`.
 
-The external build is GREEN. The remaining RED is runtime execution: the
-compiler-emitted package and accepted verification report must cross a supported
-generic Echo runner, scheduler-owned bounded evaluation, durable submission and
-decided-Tick WAL boundaries, restart recovery, and typed duplicate obstruction
-without hidden mutation.
+## Local runtime witness
+
+Run the complete compiler-to-runtime suite with the same compatible checkouts:
+
+```sh
+EDICT_REPO=/path/to/edict \
+ECHO_REPO=/path/to/echo \
+./tests/runtime.sh
+```
+
+The suite builds the application once, then invokes `tests/run.sh` with isolated
+input and WAL directories. That external boundary supplies only the exact
+compiler-produced package, accepted verification report, vendored capability
+closure, typed JSON input, and empty WAL path to Echo's generic
+`run-edict-operation` command.
+
+The structured witness proves:
+
+- accepted-submission WAL commit before acknowledgement;
+- pending-Action recovery by reopening the same WAL before evaluation;
+- one scheduler-selected Action in one atomic Tick;
+- decided-Tick recovery of Action, Tick, state, outcome, and Receipt by
+  reopening that persisted WAL in another fresh host;
+- successful greeting state derived from typed input;
+- package-declared `causal.cell@1.AlreadyExists` obstruction on duplicate
+  creation, with equal canonical application-state roots and typed target-value
+  digests independently demonstrating no hidden mutation;
+- refusal to recover the WAL against a mutated pre-Tick initial state; and
+- exact compiler artifact identities without checkout paths in the report.
+
+The test matrix includes the golden case, a byte-identical deterministic fresh
+rerun, malformed and oversized refusals, the exact 256-byte replacement
+boundary, three cases derived from fixed seed `69603`, and eight bounded
+isolated recovery runs. WAL replay is the fresh-host recovery performed inside
+each generic runner invocation; the deterministic rerun is separate evidence.
+
+This is singleton scheduler integration: one Action in one Tick. It does not
+claim permanent multi-Action Tick composition or introduce external effects.
 
 No artifact in this repository may be replaced by a handwritten Echo package,
 and no native Hello Echo callback may implement application semantics.
