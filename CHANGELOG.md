@@ -25,7 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Require the runtime witness to retain the exact Edict-authored
   `GreetingCreated { key, message }` result identity and canonical bytes through
-  generic Echo evaluation and WAL recovery.
+  generic Echo evaluation and to compare the applied, fresh-host, and
+  WAL-recovered result records exactly.
 - Distinguished producer-satisfied review findings from stale or
   unreproducible findings, bounded operator-authorized remediation without
   resetting the autonomous budget, and made disposition-only closure
