@@ -46,6 +46,9 @@ RunState {
   worktree_status
   phase1_attempts_used
   code_lawyer_passes_used
+  operator_remediation_passes_used
+  operator_authorization
+  prior_escalation
   reviewer_wait_remaining
   reviewer_status
   unclassified_findings_remaining
@@ -63,6 +66,9 @@ Initial bounds:
 ```text
 phase1_attempts_used = 0
 code_lawyer_passes_used = 0
+operator_remediation_passes_used = 0
+operator_authorization = none
+prior_escalation = none
 reviewer_wait_remaining = 15 minutes per pull request
 gate_closure_count_by_criterion = 0 for every criterion
 tasks_remaining = 8
@@ -133,9 +139,11 @@ capability, repository, branch, budget, gate result, or disposition rule.
 | Detect bot completion | Deterministic law | Review, refusal, cooldown, timed acknowledgment, or deadline |
 | Build Code Lawyer intake | Deterministic law | Unresolved bot-authored threads only |
 | Finding applicability to diff intent | Judgment | `AssessDiffIntent` |
-| Derive thread outcome | Deterministic law | FIXED, DEFERRED, STALE, UNREPRODUCIBLE, BLOCKED |
+| Derive thread outcome | Deterministic law | FIXED, SATISFIED_BY_DEPENDENCY, DEFERRED, STALE, UNREPRODUCIBLE, BLOCKED |
 | Reply to or resolve bot thread | External interaction | Human-authored threads cannot be resolved |
-| Account Code Lawyer passes | Deterministic law | Maximum two |
+| Account autonomous Code Lawyer passes | Deterministic law | Maximum two; escalation does not reset the count |
+| Admit operator authorization | External interaction | Exact prior escalation, PR head, mode, and finite bot-thread set |
+| Validate operator-authorized work | Deterministic law | At most one named remediation pass; disposition-only cannot mutate |
 | Evaluate merge gate in order | Deterministic law | CI, threads, outcomes, local checks, approval |
 | Merge gated PR | External interaction | Policy-selected allowed method; no admin operation |
 | Sync, prune, and delete safe branch | External interaction | Separate bounded requests |
@@ -196,8 +204,8 @@ predicate:
 
 1. all CI checks complete and passing;
 2. no unresolved bot-authored review thread;
-3. every Code Lawyer outcome is `FIXED`, `DEFERRED`, `STALE`, or
-   `UNREPRODUCIBLE`;
+3. every Code Lawyer outcome is `FIXED`, `SATISFIED_BY_DEPENDENCY`, `DEFERRED`,
+   `STALE`, or `UNREPRODUCIBLE`;
 4. repository suite and linters pass, excluding only a recorded baseline; and
 5. required non-bot approval exists, or the recorded solo-maintainer
    substitution is valid.
@@ -207,6 +215,7 @@ predicate:
 ```mermaid
 stateDiagram-v2
     [*] --> B01_REMOTE_REPOSITORY
+    [*] --> R59_OPERATOR_AUTHORIZED_RESUMPTION: exact prior escalation and authorization
 
     state Bootstrap {
         B01_REMOTE_REPOSITORY --> B02_LOCAL_REPOSITORY
@@ -258,9 +267,11 @@ stateDiagram-v2
         R53_WAIT_REVIEW --> R54_CODE_LAWYER_INTAKE: all reviewers done
         R54_CODE_LAWYER_INTAKE --> J55_ASSESS_THREADS
         J55_ASSESS_THREADS --> R56_APPLY_THREAD_FIX: valid finding
+        J55_ASSESS_THREADS --> R57_RESOLVE_BOT_THREADS: authorized disposition only
         R56_APPLY_THREAD_FIX --> R57_RESOLVE_BOT_THREADS
         R57_RESOLVE_BOT_THREADS --> R58_CODE_LAWYER_RECHECK
-        R58_CODE_LAWYER_RECHECK --> J55_ASSESS_THREADS: second pass
+        R58_CODE_LAWYER_RECHECK --> J55_ASSESS_THREADS: second autonomous pass
+        R59_OPERATOR_AUTHORIZED_RESUMPTION --> J55_ASSESS_THREADS: exact named threads
         J55_ASSESS_THREADS --> G60_MERGE_GATE: queue empty
     }
 
@@ -287,7 +298,8 @@ stateDiagram-v2
     J30_AUTHOR_RED --> ESCALATED: malformed model return
     J34_AUTHOR_FIX --> ESCALATED: malformed model return
     P44_REMEDIATE --> ESCALATED: third failed Phase-1 pass
-    R58_CODE_LAWYER_RECHECK --> ESCALATED: third pass required
+    R58_CODE_LAWYER_RECHECK --> ESCALATED: autonomous budget exhausted
+    R59_OPERATOR_AUTHORIZED_RESUMPTION --> ESCALATED: authorization invalid
     G60_MERGE_GATE --> ESCALATED: same criterion closes twice
     S74_VERIFY_CLEAN --> ESCALATED: worktree not clean
 
@@ -324,6 +336,7 @@ it.
 | `SetIssueDependency` | Add or remove one native `blocked by` edge using GraphQL node identities. |
 | `OpenTaskPullRequest` | Open one non-draft PR from the current feature ref to the pinned merge target. |
 | `RequestFixedBotReviews` | Post the two policy-declared reviewer requests. |
+| `ObserveOperatorAuthorization` | Admit one operator directive bound to an exact prior escalation, PR head, mode, and finite bot-thread set. |
 | `ReplyToBotThread` | Post one disposition reply to a bot-authored thread. |
 | `ResolveBotThread` | Resolve only a bot-authored thread after a recorded disposition. |
 | `MergeGatedPullRequest` | Merge the exact gated head with a repository-allowed non-admin method. |
@@ -402,6 +415,7 @@ every successful transition and is the only effect shared by all states.
 | `R56_APPLY_THREAD_FIX` | `RequestModelJudgment.AuthorMinimalFix`, `ApplyValidatedPatch`, `RunRegisteredCheck`, `CreateCommitFromExplicitPaths`, `PushFeatureRef` | Valid finding fixed and tested on feature ref. |
 | `R57_RESOLVE_BOT_THREADS` | `ReplyToBotThread`, `ResolveBotThread` | Reply records outcome; bot thread resolved. |
 | `R58_CODE_LAWYER_RECHECK` | `ObserveGitHubState` | No new bot thread, or one remaining pass is selected. |
+| `R59_OPERATOR_AUTHORIZED_RESUMPTION` | `ObserveOperatorAuthorization`, `ObserveGitHubState` | Authorization is exact, bounded, unconsumed, and bound to the current PR head. |
 | `G60_MERGE_GATE` | `ObserveGitHubState`, `ObserveRepositorySnapshot`, `RunRegisteredCheck` | Five ordered gate predicates are true. |
 | `G61_GATE_REMEDIATION` | `ObserveGitHubState`, `ObserveRepositorySnapshot`, `RunRegisteredCheck`, `ObserveTimerSettlement` | First closure is re-observed once without mutation. |
 | `G62_MERGE` | `MergeGatedPullRequest` | Gated PR merged without admin. |
@@ -424,9 +438,15 @@ silently retries the phase. An ambiguous effect becomes `outcome_unknown`; it
 is not collapsed into failure. Unless a transition names a bounded retry
 counter, it records evidence and transitions to `ESCALATED`.
 
+`ESCALATED` remains terminal. An operator-authorized continuation creates a new
+run whose `prior_escalation` is the exact terminal record. The new run retains
+the autonomous pass count and any consumed operator-remediation count. It does
+not transition out of, rewrite, or reset the terminal run.
+
 | From | Guard | To | Counter change or failure |
 | --- | --- | --- | --- |
 | Start | State schema and policy digest valid | `B01_REMOTE_REPOSITORY` | Invalid state fails closed. |
+| Authorized resume | Prior terminal is Code Lawyer pass exhaustion; authorization binds its PR head and named bot threads | `R59_OPERATOR_AUTHORIZED_RESUMPTION` | New run retains all prior pass counts. |
 | `B01_REMOTE_REPOSITORY` | Repository exists or permitted creation succeeds | `B02_LOCAL_REPOSITORY` | Creation failure escalates. |
 | `B02_LOCAL_REPOSITORY` | Local history preserved or new local repo created | `B03_REMOTE_BINDING` | Unexpected history escalates. |
 | `B03_REMOTE_BINDING` | Origin absent and may be added, or exact | `B04_REQUIRED_FILES` | Conflicting origin escalates. |
@@ -467,15 +487,21 @@ counter, it records evidence and transitions to `ESCALATED`.
 | `R52_REQUEST_REVIEW` | Both fixed reviewer requests exist | `R53_WAIT_REVIEW` | A failed request effect escalates. |
 | `R53_WAIT_REVIEW` | Reviewer incomplete and time remains | `R53_WAIT_REVIEW` | Subtract witnessed elapsed time; poll no faster than 60 seconds. |
 | `R53_WAIT_REVIEW` | Every reviewer done by rule or deadline | `R54_CODE_LAWYER_INTAKE` | Deadline is completion, not approval. |
-| `R54_CODE_LAWYER_INTAKE` | Queue built from unresolved bot threads | `J55_ASSESS_THREADS` | Human threads remain untouched. |
+| `R54_CODE_LAWYER_INTAKE` | Queue is empty | `G60_MERGE_GATE` | No Code Lawyer pass is consumed. |
+| `R54_CODE_LAWYER_INTAKE` | Queue built from unresolved bot threads; no autonomous pass used | `J55_ASSESS_THREADS` | Set `code_lawyer_passes_used = 1`; human threads remain untouched. |
 | `J55_ASSESS_THREADS` | Queue empty | `G60_MERGE_GATE` | Outcomes complete. |
-| `J55_ASSESS_THREADS` | Valid fixable finding and pass remains | `R56_APPLY_THREAD_FIX` | Increment lawyer pass on completed pass. |
+| `J55_ASSESS_THREADS` | Valid fixable finding and autonomous or operator remediation authority remains | `R56_APPLY_THREAD_FIX` | No counter reset or implicit additional pass. |
+| `J55_ASSESS_THREADS` | Gate-admissible outcome exists and disposition-only authority names the thread | `R57_RESOLVE_BOT_THREADS` | Repository mutation and review-request effects are absent. |
 | `J55_ASSESS_THREADS` | Finding cannot safely progress | `R57_RESOLVE_BOT_THREADS` | Record `BLOCKED`; gate will close. |
 | `R56_APPLY_THREAD_FIX` | Patch tested, committed, pushed | `R57_RESOLVE_BOT_THREADS` | Any failure records `BLOCKED`; no hidden retry loop. |
 | `R57_RESOLVE_BOT_THREADS` | Outcome reply exists for bot thread | `R58_CODE_LAWYER_RECHECK` | Human author means no resolution effect. |
 | `R58_CODE_LAWYER_RECHECK` | New bot threads and fewer than two passes used | `J55_ASSESS_THREADS` | Increment pass count. |
-| `R58_CODE_LAWYER_RECHECK` | Third pass would be required | `ESCALATED` | Exact thread ids recorded. |
+| `R58_CODE_LAWYER_RECHECK` | New bot threads and two autonomous passes used | `ESCALATED` | Exact thread ids recorded; autonomous count remains two. |
+| `R58_CODE_LAWYER_RECHECK` | Operator-authorized run observes an unadmitted thread | `ESCALATED` | No authorization widening or implicit new bot cycle. |
 | `R58_CODE_LAWYER_RECHECK` | No new bot thread | `G60_MERGE_GATE` | Queue stable. |
+| `R59_OPERATOR_AUTHORIZED_RESUMPTION` | Mode is `remediation_pass`, named threads are exact, and no operator remediation pass was used | `J55_ASSESS_THREADS` | Set `operator_remediation_passes_used = 1`; autonomous count is unchanged. |
+| `R59_OPERATOR_AUTHORIZED_RESUMPTION` | Mode is `disposition_only`, named threads are exact, and admitted evidence permits a gate-admissible outcome | `J55_ASSESS_THREADS` | Patch, commit, push, and review-request effects remain unavailable. |
+| `R59_OPERATOR_AUTHORIZED_RESUMPTION` | Authorization is broad, reused, mismatched, or requests a second operator remediation pass | `ESCALATED` | Reject without thread or repository mutation. |
 | `G60_MERGE_GATE` | All five criteria true in order | `G62_MERGE` | Gate-open record committed. |
 | `G60_MERGE_GATE` | First false criterion has closed once | `G61_GATE_REMEDIATION` | Increment that criterion count. |
 | `G60_MERGE_GATE` | Same criterion closes a second time | `ESCALATED` | Criterion and evidence recorded. |
@@ -594,7 +620,8 @@ AssessDiffIntent(
   task: TaskSpec,
   diff: CanonicalDiff,
   validation: ValidationEvidence,
-  review_threads: Bounded<ReviewThreadEvidence>
+  review_threads: Bounded<ReviewThreadEvidence>,
+  dependency_evidence: Bounded<AdmittedDependencyEvidence>
 ) -> DiffAssessment {
   achieves_intent: Boolean,
   evidence: NonEmpty<EvidenceId>,
@@ -604,14 +631,22 @@ AssessDiffIntent(
     applies: Boolean,
     reproduced: Boolean,
     evidence
+  }>,
+  dependency_assessment: Optional<{
+    evidence_id,
+    consumer_change_required: Boolean,
+    rationale: BoundedText
   }>
 }
 ```
 
 The host derives `STALE` from object identity, `UNREPRODUCIBLE` from a false
 reproduction backed by supplied evidence, `FIXED` from current-head validation,
-and `DEFERRED` only from a routed issue reference. An unexplained false value is
-malformed.
+`SATISFIED_BY_DEPENDENCY` from a validated dependency assessment whose consumer
+change flag is false, and `DEFERRED` only from a routed issue reference. The
+host projects repository, issue, PR, and commit identities from admitted
+dependency evidence; the model cannot invent or replace them. An unexplained
+false value or an unknown evidence identity is malformed.
 
 ### `SelectTieTask`
 
@@ -639,6 +674,8 @@ No model-generated ordering or grouping is accepted.
 Thread outcomes are:
 
 - `FIXED`: current-head test and diff evidence prove the finding repaired;
+- `SATISFIED_BY_DEPENDENCY`: admitted producer-owned evidence proves the
+  consumer finding satisfied and no consumer change is required;
 - `DEFERRED`: an in-scope routed issue exists and the present task may safely
   land without the change;
 - `STALE`: the referenced current-head object or line no longer exists;
@@ -646,7 +683,42 @@ Thread outcomes are:
 - `BLOCKED`: the finding remains applicable and no authorized remediation can
   complete it.
 
-Only the first four satisfy the merge gate.
+Only the first five satisfy the merge gate.
+
+`SATISFIED_BY_DEPENDENCY` has this canonical record:
+
+```text
+{
+  outcome: SATISFIED_BY_DEPENDENCY,
+  owning_repo: RepositoryId,
+  issue: IssueNumber,
+  pr: PullRequestNumber,
+  commit: FullCommitOid,
+  consumer_change_required: false,
+  rationale: BoundedText
+}
+```
+
+The host admits the record only when the producer PR is merged, `commit` is in
+its merged dependency closure, the evidence addresses the exact consumer
+finding, and the consumer requires no change. A true or absent
+`consumer_change_required` value is not coercible and does not satisfy the
+gate. This is not `STALE`: the consumer thread can remain anchored to current
+code. It is not `UNREPRODUCIBLE`: the concern may be valid while its proof is
+owned by a dependency.
+
+The motivating admitted record is:
+
+```text
+outcome: SATISFIED_BY_DEPENDENCY
+owning_repo: flyingrobots/echo
+issue: 699
+pr: 700
+commit: 63482dc4dd219d51769b79b80173610ca180f7d2
+consumer_change_required: false
+rationale: Echo's producer-owned negative and integration coverage closes the
+  Hello Echo duplicate-state finding without a consumer change.
+```
 
 ## Reachability and progress proof
 
@@ -661,8 +733,12 @@ Every non-terminal state has a path to a terminal:
 3. Finding-classification self-loops decrement a finite finding count.
 4. Bot polling subtracts witnessed elapsed time from a 15-minute budget. At
    zero, the reviewer is deterministically complete for this run.
-5. Code Lawyer consumes at most two passes. A required third pass transitions
-   to `ESCALATED`.
+5. Code Lawyer consumes at most two autonomous passes. A required third
+   autonomous pass transitions to `ESCALATED`. A new run may consume at most
+   one exact operator-authorized remediation pass; its counter cannot reset. A
+   disposition-only authorization decrements a finite named-thread set and
+   cannot enter a patch, commit, push, or review-request state. Any unadmitted
+   thread escalates.
 6. A failed merge criterion gets one bounded remediation/re-observation.
    Closing the same criterion twice transitions to `ESCALATED`. Since the gate
    has five criteria, criterion rotation cannot create an infinite loop.
@@ -714,6 +790,16 @@ No legal cycle lacks a strictly decreasing finite measure.
    stop immediately after D2 would skip the issue and dependency reconciliation
    needed to preserve those blockers. Blocker filing therefore occurs between
    D1 and D2; D3-D5 implementation still stops.
+10. **Cross-repository review disposition.** The original outcome vocabulary
+    forced producer-owned proof into `STALE` or `UNREPRODUCIBLE`, even when the
+    consumer thread remained current and conceptually valid.
+    `SATISFIED_BY_DEPENDENCY` records the merged producer issue, PR, commit, and
+    no-consumer-change decision without copying producer behavior into the
+    consumer.
+11. **Pass and disposition conflation.** A no-change operator disposition was
+    indistinguishable from another remediation pass. The machine now keeps two
+    autonomous passes, one separately counted named operator remediation pass,
+    and finite disposition-only authority that cannot mutate or request review.
 
 ## Escalation record
 
@@ -735,6 +821,8 @@ phase, attempts, evidence identifiers, or requested decision.
   directive stop condition has been reached.
 - `ESCALATED`: a named guard, authority, dependency, malformed judgment,
   repeated failure, or external-state condition requires one operator decision.
+  A later authorization starts a new run bound to this immutable terminal; it
+  does not reopen or reset it.
 - `BUDGET_EXHAUSTED`: eight completed task iterations have been consumed and
   the final feature commit is pushed with a clean worktree.
 
