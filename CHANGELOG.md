@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Require Echo-produced before/after application-state roots and typed
+  target-value digests to be present, canonical, and equal before the duplicate
+  no-mutation witness can pass.
 - Clear prior application output before each build so stale artifacts cannot
   satisfy post-build validation.
 - Restored the pure compiler-to-runtime Hello Echo proof as Roadmap A, defined
