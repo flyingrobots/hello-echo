@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Distinguished producer-satisfied review findings from stale or
+  unreproducible findings, bounded operator-authorized remediation without
+  resetting the autonomous budget, and made disposition-only closure
+  non-mutating.
 - Require Echo-produced before/after application-state roots and typed
   target-value digests to be present, canonical, and equal before the duplicate
   no-mutation witness can pass.

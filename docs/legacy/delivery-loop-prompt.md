@@ -29,6 +29,15 @@ Operative addenda recorded after the baseline prompt:
   `docs/roadmap.md`; the baseline prompt below remains the preserved
   human-directed execution protocol until Roadmap Ω passes its negative
   envelope tests.
+- After two autonomous Code Lawyer passes, escalate. An operator may authorize
+  one additional remediation pass by naming the admitted findings. The
+  authorization does not reset the autonomous budget. An operator may instead
+  authorize a disposition-only closure for named bot threads when admitted
+  evidence already establishes a gate-admissible outcome. Disposition-only
+  authority permits no repository mutation and no new review request.
+- `SATISFIED_BY_DEPENDENCY` is a gate-admissible Code Lawyer outcome when
+  producer-owned evidence closes a consumer finding and no consumer change is
+  required. It is neither `STALE` nor `UNREPRODUCIBLE`.
 
 ---
 
@@ -60,7 +69,9 @@ Stop. Do not attempt a workaround.
 
 - Max 8 task iterations per invocation, then stop and report.
 - Max 3 Phase-1 remediation iterations per task.
-- Max 2 Code Lawyer passes per PR.
+- Max 2 autonomous Code Lawyer passes per PR.
+- Max 1 operator-authorized additional remediation pass for explicitly named
+  findings. Authorization does not reset the autonomous pass count.
 - Max 15 minutes total bot-review wait per PR.
 
 On any budget exhaustion, finish the current commit, push, and report state. Never leave the worktree dirty.
@@ -165,6 +176,8 @@ gh pr create --base main --fill --body "<intent>. Closes #<issue-number>."
 ```
 
 Commit messages and PR body: terse, systems-oriented, precise rule language. No narration.
+Creating a new pull request initializes its autonomous Code Lawyer pass count
+to zero. Resuming the same pull request retains its existing count.
 
 #### 4.3 Phase 2 — Bot review, bounded
 
@@ -172,7 +185,14 @@ Commit messages and PR body: terse, systems-oriented, precise rule language. No 
 2. Poll every 60s. A reviewer is **done** when any of these holds: it posts a review or review comment; it posts a cooldown, rate-limit, or refusal notice; it reacts to the request comment and 5 minutes elapse with no review; 15 minutes elapse in total.
 3. A reaction alone is acknowledgment, not completion. Never treat a 👍 as a finished review.
 4. When all reviewers are done, run **Code Lawyer** (see Call Interface).
-5. Push. If new bot threads appeared, run a second Code Lawyer pass. Never a third — escalate instead.
+5. Push. If new bot threads appeared, run a second autonomous Code Lawyer
+   pass. After two autonomous passes, escalate. An operator may authorize one
+   narrowly scoped additional remediation pass by naming the admitted
+   findings. Authorization does not reset the autonomous pass budget.
+6. A disposition-only authorization is not a remediation pass. It may reply to
+   and resolve only the named bot-authored threads using already-admitted
+   evidence. It may not change source or documentation, request another bot
+   review, or dispose a finding as `BLOCKED`.
 
 #### 4.4 Merge gate
 
@@ -182,7 +202,8 @@ Gate criteria, evaluated in order:
 
 1. All CI checks passing, none queued or in progress.
 2. No unresolved bot-authored review threads.
-3. All Code Lawyer outcomes are `FIXED`, `DEFERRED`, `STALE`, or `UNREPRODUCIBLE`. Any `BLOCKED` closes the gate.
+3. All Code Lawyer outcomes are `FIXED`, `SATISFIED_BY_DEPENDENCY`,
+   `DEFERRED`, `STALE`, or `UNREPRODUCIBLE`. Any `BLOCKED` closes the gate.
 4. Local suite and all linters clean, excluding the recorded baseline.
 5. **Approval.** If `main` requires review and a non-bot collaborator other than the author exists, that approval is required. If the repo is solo-maintained and branch protection does not require review, criteria 1–4 substitute for human approval — record this substitution explicitly in the merge comment.
 
@@ -220,6 +241,50 @@ Both protocols live as files, not inline text: `.agent/self-code-review.md` and 
 - Phase I.2 self-audit is **skipped** when Self Code Review already ran on this diff at the current `HEAD`. Only PR-sourced threads enter the queue. Re-auditing the same diff wastes the budget and produces duplicate findings.
 - Phase IV is report-only. Delete any merge instruction from it; the orchestrator holds merge authority.
 - Phase IV.3 approval criterion defers to orchestrator 4.4.5.
+- Every operator authorization uses this one-shot record:
+
+  ```text
+  authorization_id: <unique id>
+  operator: <authenticated operator identity>
+  prior_escalation_digest: <exact escalation digest>
+  pull_request_head: <full commit oid>
+  mode: RemediationPass | DispositionOnly
+  thread_ids: <nonempty exact bot-thread id set>
+  dispositions: <exact thread-to-admitted-disposition map>
+  issued_at: <witnessed timestamp>
+  expires_at: <later witnessed timestamp>
+  consumed_at: <none | witnessed timestamp>
+  ```
+
+  The host, not a model, authenticates the operator. It rejects an expired,
+  already consumed, replayed, head-mismatched, or thread-mismatched record
+  before any reply or repository action. Entering either mode atomically
+  records `consumed_at`; the disjoint mode cannot be changed or reused.
+  `RemediationPass` requires an empty disposition map. `DispositionOnly`
+  requires one already-admitted gate-admissible disposition for every named
+  thread and proceeds directly to reply and resolution without reassessment.
+- An operator-authorized additional remediation pass is bound to the exact
+  escalated PR head and named thread identifiers. It cannot admit a different
+  finding and cannot reset either autonomous pass.
+- A disposition-only authorization bypasses remediation. It permits only a
+  reply, resolution of the named bot-authored thread, and merge-gate
+  re-evaluation. It does not authorize a new Code Lawyer pass.
+- `SATISFIED_BY_DEPENDENCY` records:
+
+  ```text
+  outcome: SATISFIED_BY_DEPENDENCY
+  owning_repo: <owner/name>
+  issue: <number>
+  pr: <number>
+  commit: <full commit oid>
+  consumer_change_required: false
+  rationale: <why producer proof closes the consumer finding>
+  ```
+
+  The referenced producer commit must be admitted in the dependency closure,
+  the rationale must bind its proof to the consumer finding, and
+  `consumer_change_required` must be `false`. Otherwise the outcome is not
+  gate-admissible.
 
 ## Final Report
 
