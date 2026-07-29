@@ -77,7 +77,8 @@ The structured witness proves:
   reopening that persisted WAL in another fresh host;
 - successful greeting state derived from typed input;
 - package-declared `causal.cell@1.AlreadyExists` obstruction on duplicate
-  creation without hidden mutation;
+  creation, with equal canonical application-state roots and typed target-value
+  digests independently demonstrating no hidden mutation;
 - refusal to recover the WAL against a mutated pre-Tick initial state; and
 - exact compiler artifact identities without checkout paths in the report.
 
