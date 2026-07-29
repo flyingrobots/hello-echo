@@ -239,6 +239,24 @@ Both protocols live as files, not inline text: `.agent/self-code-review.md` and 
 - Phase I.2 self-audit is **skipped** when Self Code Review already ran on this diff at the current `HEAD`. Only PR-sourced threads enter the queue. Re-auditing the same diff wastes the budget and produces duplicate findings.
 - Phase IV is report-only. Delete any merge instruction from it; the orchestrator holds merge authority.
 - Phase IV.3 approval criterion defers to orchestrator 4.4.5.
+- Every operator authorization uses this one-shot record:
+
+  ```text
+  authorization_id: <unique id>
+  operator: <authenticated operator identity>
+  prior_escalation_digest: <exact escalation digest>
+  pull_request_head: <full commit oid>
+  mode: RemediationPass | DispositionOnly
+  thread_ids: <nonempty exact bot-thread id set>
+  issued_at: <witnessed timestamp>
+  expires_at: <later witnessed timestamp>
+  consumed_at: <none | witnessed timestamp>
+  ```
+
+  The host, not a model, authenticates the operator. It rejects an expired,
+  already consumed, replayed, head-mismatched, or thread-mismatched record
+  before any reply or repository action. Entering either mode atomically
+  records `consumed_at`; the disjoint mode cannot be changed or reused.
 - An operator-authorized additional remediation pass is bound to the exact
   escalated PR head and named thread identifiers. It cannot admit a different
   finding and cannot reset either autonomous pass.

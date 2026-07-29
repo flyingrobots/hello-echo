@@ -47,8 +47,8 @@ RunState {
   phase1_attempts_used
   code_lawyer_passes_used
   operator_remediation_passes_used
-  operator_authorization
-  prior_escalation
+  operator_authorization: Option<OperatorAuthorization>
+  prior_escalation: Option<EscalationDigest>
   reviewer_wait_remaining
   reviewer_status
   unclassified_findings_remaining
@@ -60,6 +60,29 @@ RunState {
   escalation
 }
 ```
+
+```text
+OperatorAuthorization {
+  authorization_id: AuthorizationId
+  operator: AuthenticatedOperator
+  prior_escalation_digest: EscalationDigest
+  pull_request_head: FullCommitOid
+  mode: RemediationPass | DispositionOnly
+  thread_ids: NonEmpty<ReviewThreadId>
+  issued_at: WitnessedTimestamp
+  expires_at: WitnessedTimestamp
+  consumed_at: Option<WitnessedTimestamp>
+}
+```
+
+The host authenticates `operator`; a model cannot supply that identity.
+`authorization_id` must be unique in admitted history, `expires_at` must follow
+`issued_at`, and the admitted current time must not exceed it. Before any
+authorized continuation, the host atomically persists `consumed_at` with the
+next phase. An expired, already consumed, replayed, head-mismatched, or
+thread-mismatched record fails closed before a reply or repository effect.
+`mode` is a disjoint sum: one authorization cannot grant both remediation and
+disposition-only paths.
 
 Initial bounds:
 
@@ -142,7 +165,7 @@ capability, repository, branch, budget, gate result, or disposition rule.
 | Derive thread outcome | Deterministic law | FIXED, SATISFIED_BY_DEPENDENCY, DEFERRED, STALE, UNREPRODUCIBLE, BLOCKED |
 | Reply to or resolve bot thread | External interaction | Human-authored threads cannot be resolved |
 | Account autonomous Code Lawyer passes | Deterministic law | Maximum two; escalation does not reset the count |
-| Admit operator authorization | External interaction | Exact prior escalation, PR head, mode, and finite bot-thread set |
+| Admit operator authorization | External interaction | Authenticated, unique, expiring, one-shot record for an exact prior escalation, PR head, mode, and finite bot-thread set |
 | Validate operator-authorized work | Deterministic law | At most one named remediation pass; disposition-only cannot mutate |
 | Evaluate merge gate in order | Deterministic law | CI, threads, outcomes, local checks, approval |
 | Merge gated PR | External interaction | Policy-selected allowed method; no admin operation |
@@ -336,7 +359,7 @@ it.
 | `SetIssueDependency` | Add or remove one native `blocked by` edge using GraphQL node identities. |
 | `OpenTaskPullRequest` | Open one non-draft PR from the current feature ref to the pinned merge target. |
 | `RequestFixedBotReviews` | Post the two policy-declared reviewer requests. |
-| `ObserveOperatorAuthorization` | Admit one operator directive bound to an exact prior escalation, PR head, mode, and finite bot-thread set. |
+| `ObserveOperatorAuthorization` | Admit one authenticated, unique, expiring operator directive bound to an exact prior escalation, PR head, disjoint mode, and finite bot-thread set. |
 | `ReplyToBotThread` | Post one disposition reply to a bot-authored thread. |
 | `ResolveBotThread` | Resolve only a bot-authored thread after a recorded disposition. |
 | `MergeGatedPullRequest` | Merge the exact gated head with a repository-allowed non-admin method. |
@@ -492,15 +515,16 @@ not transition out of, rewrite, or reset the terminal run.
 | `J55_ASSESS_THREADS` | Queue empty | `G60_MERGE_GATE` | Outcomes complete. |
 | `J55_ASSESS_THREADS` | Valid fixable finding and autonomous or operator remediation authority remains | `R56_APPLY_THREAD_FIX` | No counter reset or implicit additional pass. |
 | `J55_ASSESS_THREADS` | Gate-admissible outcome exists and disposition-only authority names the thread | `R57_RESOLVE_BOT_THREADS` | Repository mutation and review-request effects are absent. |
-| `J55_ASSESS_THREADS` | Finding cannot safely progress | `R57_RESOLVE_BOT_THREADS` | Record `BLOCKED`; gate will close. |
+| `J55_ASSESS_THREADS` | Finding cannot safely progress and mode is not `DispositionOnly` | `R57_RESOLVE_BOT_THREADS` | Record `BLOCKED`; gate will close. |
+| `J55_ASSESS_THREADS` | Disposition-only authority cannot derive a gate-admissible outcome | `ESCALATED` | Reject without reply, resolution, or repository mutation. |
 | `R56_APPLY_THREAD_FIX` | Patch tested, committed, pushed | `R57_RESOLVE_BOT_THREADS` | Any failure records `BLOCKED`; no hidden retry loop. |
 | `R57_RESOLVE_BOT_THREADS` | Outcome reply exists for bot thread | `R58_CODE_LAWYER_RECHECK` | Human author means no resolution effect. |
 | `R58_CODE_LAWYER_RECHECK` | New bot threads and fewer than two passes used | `J55_ASSESS_THREADS` | Increment pass count. |
 | `R58_CODE_LAWYER_RECHECK` | New bot threads and two autonomous passes used | `ESCALATED` | Exact thread ids recorded; autonomous count remains two. |
 | `R58_CODE_LAWYER_RECHECK` | Operator-authorized run observes an unadmitted thread | `ESCALATED` | No authorization widening or implicit new bot cycle. |
 | `R58_CODE_LAWYER_RECHECK` | No new bot thread | `G60_MERGE_GATE` | Queue stable. |
-| `R59_OPERATOR_AUTHORIZED_RESUMPTION` | Mode is `remediation_pass`, named threads are exact, and no operator remediation pass was used | `J55_ASSESS_THREADS` | Set `operator_remediation_passes_used = 1`; autonomous count is unchanged. |
-| `R59_OPERATOR_AUTHORIZED_RESUMPTION` | Mode is `disposition_only`, named threads are exact, and admitted evidence permits a gate-admissible outcome | `J55_ASSESS_THREADS` | Patch, commit, push, and review-request effects remain unavailable. |
+| `R59_OPERATOR_AUTHORIZED_RESUMPTION` | Fresh unexpired mode is `RemediationPass`, named threads are exact, and no operator remediation pass was used | `J55_ASSESS_THREADS` | Atomically set `consumed_at` and `operator_remediation_passes_used = 1`; autonomous count is unchanged. |
+| `R59_OPERATOR_AUTHORIZED_RESUMPTION` | Fresh unexpired mode is `DispositionOnly`, named threads are exact, and admitted evidence permits a gate-admissible outcome | `J55_ASSESS_THREADS` | Atomically set `consumed_at`; patch, commit, push, and review-request effects remain unavailable. |
 | `R59_OPERATOR_AUTHORIZED_RESUMPTION` | Authorization is broad, reused, mismatched, or requests a second operator remediation pass | `ESCALATED` | Reject without thread or repository mutation. |
 | `G60_MERGE_GATE` | All five criteria true in order | `G62_MERGE` | Gate-open record committed. |
 | `G60_MERGE_GATE` | First false criterion has closed once | `G61_GATE_REMEDIATION` | Increment that criterion count. |
@@ -710,14 +734,18 @@ owned by a dependency.
 The motivating admitted record is:
 
 ```text
+consumer_repo: flyingrobots/hello-echo
+consumer_issue: 3
+consumer_pr: 17
+consumer_thread: PRRT_kwDOTmLBK86UmreO
 outcome: SATISFIED_BY_DEPENDENCY
 owning_repo: flyingrobots/echo
 issue: 699
 pr: 700
 commit: 63482dc4dd219d51769b79b80173610ca180f7d2
 consumer_change_required: false
-rationale: Echo's producer-owned negative and integration coverage closes the
-  Hello Echo duplicate-state finding without a consumer change.
+rationale: Echo #700's producer-owned negative and integration coverage closes
+  the Hello Echo PR #17 duplicate-state finding without a consumer change.
 ```
 
 ## Reachability and progress proof
