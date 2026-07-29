@@ -15,6 +15,7 @@ mkdir -p "$runtime_root"
 package_file=.build/application/executable-operation-package.cbor
 verification_report_file=.build/application/verification-report.cbor
 lawpack_manifest_file=vendor/causal-cell/manifest.cbor
+typed_result_fixtures=tests/typed-result-fixtures.json
 expected_package_sha256=3665d692cdd120f116f18067f2fd583e841448d057b5e35515f57264f853d0f6
 expected_verification_report_sha256=2541c8263d95fdad52f4f5a3bbfed48fdefd9f20969156c3c3fd56be912b66dd
 expected_lawpack_manifest_sha256=7bb901c984a92ed50795f8b5f7efe8d0648124574fa82250c6373a30e94333c9
@@ -103,18 +104,27 @@ assert_common_witness() {
   ' "$witness" >/dev/null
 }
 
+assert_typed_result() {
+  witness=$1
+  case_name=$2
+  expected_result=$(jq -e --arg case_name "$case_name" '.[$case_name]' \
+    "$typed_result_fixtures")
+  jq -e \
+    --argjson expected_result "$expected_result" \
+    '.applicationResult.canonicalBytesHex == $expected_result.canonicalBytesHex
+      and .applicationResult.resultIdentity == $expected_result.resultIdentity' \
+    "$witness" >/dev/null
+}
+
 # Golden path: exact compiler output enters the generic durable runner.
 run_case golden tests/create-greeting.json
 golden_witness="$runtime_root/golden/witness.json"
 assert_common_witness "$golden_witness"
+assert_typed_result "$golden_witness" golden
 jq -e '
   .causalSite.basis == "u0"
   and .causalSite.nodeKey == "greeting"
   and .state.valueUtf8 == "Hello Echo"
-  and .applicationResult.canonicalBytesHex
-    == "a2636b6579686772656574696e67676d6573736167656a48656c6c6f204563686f"
-  and .applicationResult.resultIdentity
-    == "bfc50f30e68ac57742ef0fb0ccc41506c1af4a9ecdeca32c0b934a1adccb9860"
 ' "$golden_witness" >/dev/null
 
 # Identical source, closure, input, and empty-WAL basis produce identical evidence.
@@ -122,6 +132,12 @@ jq -e '
 # asserted by the recovery fields above.
 run_case deterministic-rerun tests/create-greeting.json
 cmp "$golden_witness" "$runtime_root/deterministic-rerun/witness.json"
+
+# A stale golden result cannot satisfy another case's application-owned fixture.
+if assert_typed_result "$golden_witness" property-1; then
+  echo "golden result unexpectedly satisfied the first property case" >&2
+  exit 1
+fi
 
 # The witness is portable evidence and must not disclose checkout paths.
 edict_repo_root=$(CDPATH='' cd -- "$EDICT_REPO" && pwd -P)
@@ -172,6 +188,7 @@ jq -n --arg value "$(jq -nr '"x" * 256')" \
   >"$runtime_root/maximum-input.json"
 run_case maximum "$runtime_root/maximum-input.json"
 assert_common_witness "$runtime_root/maximum/witness.json"
+assert_typed_result "$runtime_root/maximum/witness.json" maximum
 test "$(jq -r '.state.valueUtf8 | length' "$runtime_root/maximum/witness.json")" -eq 256
 
 jq -n --arg value "$(jq -nr '"x" * 257')" \
@@ -210,6 +227,7 @@ do
   run_case "$property_name" "$property_input"
   property_witness="$runtime_root/$property_name/witness.json"
   assert_common_witness "$property_witness"
+  assert_typed_result "$property_witness" "$property_name"
   jq -e \
     --arg basis "$property_name" \
     --arg key "key-$property_ordinal" \
@@ -234,6 +252,7 @@ while test "$stress_ordinal" -le "$stress_count"; do
     >"$stress_input"
   run_case "$stress_name" "$stress_input"
   assert_common_witness "$runtime_root/$stress_name/witness.json"
+  assert_typed_result "$runtime_root/$stress_name/witness.json" "$stress_name"
   stress_ordinal=$((stress_ordinal + 1))
 done
 
