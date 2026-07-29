@@ -85,10 +85,11 @@ graph-only application-state roots and typed target-value digests; it does not
 mistake the legitimately extended WAL, Tick history, or Receipt evidence for
 application mutation. The application result remains the exact canonical
 `GreetingCreated { key, message }` value declared by Edict; Echo reports and
-recovers generic typed bytes without application-specific reconstruction. This
-is a singleton scheduler proof, not a claim that the permanent multi-Action
-Tick model is complete. Roadmap A.1 begins only after the runtime witness lands
-on `main`.
+recovers generic typed bytes without application-specific reconstruction. The
+external suite independently requires the applied, fresh-host, and
+WAL-recovered result records to be exactly equal. This is a singleton scheduler
+proof, not a claim that the permanent multi-Action Tick model is complete.
+Roadmap A.1 begins only after the runtime witness lands on `main`.
 
 ## Roadmap A.1 — Hello Effect
 
