@@ -76,6 +76,8 @@ assert_common_witness() {
     and .recovery.outcomeRecovered == true
     and .recovery.receiptRecovered == true
     and .recovery.applicationResultRecovered == true
+    and .recovery.freshHostApplicationResult == .applicationResult
+    and .recovery.walApplicationResult == .applicationResult
     and .recovery.mutatedInitialStateRefusal == "echo-operation-execution-mismatch/action-basis"
     and .duplicate.obstruction == "causal.cell@1.AlreadyExists"
     and (.duplicate.applicationStateRootBefore | test("^[0-9a-f]{64}$"))
