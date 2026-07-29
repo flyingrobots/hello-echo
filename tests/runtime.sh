@@ -55,6 +55,12 @@ assert_common_witness() {
     --arg lawpack_manifest_sha256 "$lawpack_manifest_sha256" \
     '
     .operation == "examples.hello_echo@1.createGreeting"
+    and .applicationResult.projectionIdentity
+      == "791fb36bb4d42273eb558ce4d03d68d90a678d15891fb9cbe4ad8a20bb56fa82"
+    and .applicationResult.outputType
+      == "examples.hello_echo@1.GreetingCreated"
+    and (.applicationResult.canonicalBytesHex | test("^([0-9a-f]{2})+$"))
+    and (.applicationResult.resultIdentity | test("^[0-9a-f]{64}$"))
     and .artifacts.package.algorithm == "sha256"
     and .artifacts.package.digestHex == $package_sha256
     and .artifacts.verificationReport.algorithm == "sha256"
@@ -69,6 +75,7 @@ assert_common_witness() {
     and .recovery.stateRecovered == true
     and .recovery.outcomeRecovered == true
     and .recovery.receiptRecovered == true
+    and .recovery.applicationResultRecovered == true
     and .recovery.mutatedInitialStateRefusal == "echo-operation-execution-mismatch/action-basis"
     and .duplicate.obstruction == "causal.cell@1.AlreadyExists"
     and (.duplicate.applicationStateRootBefore | test("^[0-9a-f]{64}$"))
@@ -102,6 +109,10 @@ jq -e '
   .causalSite.basis == "u0"
   and .causalSite.nodeKey == "greeting"
   and .state.valueUtf8 == "Hello Echo"
+  and .applicationResult.canonicalBytesHex
+    == "a2636b6579686772656574696e67676d6573736167656a48656c6c6f204563686f"
+  and .applicationResult.resultIdentity
+    == "bfc50f30e68ac57742ef0fb0ccc41506c1af4a9ecdeca32c0b934a1adccb9860"
 ' "$golden_witness" >/dev/null
 
 # Identical source, closure, input, and empty-WAL basis produce identical evidence.
