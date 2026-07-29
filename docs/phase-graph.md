@@ -46,6 +46,7 @@ RunState {
   worktree_status
   phase1_attempts_used
   code_lawyer_passes_used
+  code_lawyer_pull_request: Option<PullRequestId>
   operator_remediation_passes_used
   operator_authorization: Option<OperatorAuthorization>
   prior_escalation: Option<EscalationDigest>
@@ -69,6 +70,7 @@ OperatorAuthorization {
   pull_request_head: FullCommitOid
   mode: RemediationPass | DispositionOnly
   thread_ids: NonEmpty<ReviewThreadId>
+  dispositions: ExactMap<ReviewThreadId, AdmittedDispositionId>
   issued_at: WitnessedTimestamp
   expires_at: WitnessedTimestamp
   consumed_at: Option<WitnessedTimestamp>
@@ -82,13 +84,16 @@ authorized continuation, the host atomically persists `consumed_at` with the
 next phase. An expired, already consumed, replayed, head-mismatched, or
 thread-mismatched record fails closed before a reply or repository effect.
 `mode` is a disjoint sum: one authorization cannot grant both remediation and
-disposition-only paths.
+disposition-only paths. `RemediationPass` requires an empty `dispositions` map.
+`DispositionOnly` requires exactly one already-admitted, gate-admissible
+disposition for every `thread_ids` key.
 
 Initial bounds:
 
 ```text
 phase1_attempts_used = 0
 code_lawyer_passes_used = 0
+code_lawyer_pull_request = none
 operator_remediation_passes_used = 0
 operator_authorization = none
 prior_escalation = none
@@ -164,7 +169,7 @@ capability, repository, branch, budget, gate result, or disposition rule.
 | Finding applicability to diff intent | Judgment | `AssessDiffIntent` |
 | Derive thread outcome | Deterministic law | FIXED, SATISFIED_BY_DEPENDENCY, DEFERRED, STALE, UNREPRODUCIBLE, BLOCKED |
 | Reply to or resolve bot thread | External interaction | Human-authored threads cannot be resolved |
-| Account autonomous Code Lawyer passes | Deterministic law | Maximum two; escalation does not reset the count |
+| Account autonomous Code Lawyer passes | Deterministic law | Maximum two per pull request; a new PR initializes its own count |
 | Admit operator authorization | External interaction | Authenticated, unique, expiring, one-shot record for an exact prior escalation, PR head, mode, and finite bot-thread set |
 | Validate operator-authorized work | Deterministic law | At most one named remediation pass; disposition-only cannot mutate |
 | Evaluate merge gate in order | Deterministic law | CI, threads, outcomes, local checks, approval |
@@ -290,11 +295,12 @@ stateDiagram-v2
         R53_WAIT_REVIEW --> R54_CODE_LAWYER_INTAKE: all reviewers done
         R54_CODE_LAWYER_INTAKE --> J55_ASSESS_THREADS
         J55_ASSESS_THREADS --> R56_APPLY_THREAD_FIX: valid finding
-        J55_ASSESS_THREADS --> R57_RESOLVE_BOT_THREADS: authorized disposition only
+        J55_ASSESS_THREADS --> R57_RESOLVE_BOT_THREADS: gate-admissible assessed outcome
         R56_APPLY_THREAD_FIX --> R57_RESOLVE_BOT_THREADS
         R57_RESOLVE_BOT_THREADS --> R58_CODE_LAWYER_RECHECK
         R58_CODE_LAWYER_RECHECK --> J55_ASSESS_THREADS: second autonomous pass
-        R59_OPERATOR_AUTHORIZED_RESUMPTION --> J55_ASSESS_THREADS: exact named threads
+        R59_OPERATOR_AUTHORIZED_RESUMPTION --> J55_ASSESS_THREADS: remediation pass
+        R59_OPERATOR_AUTHORIZED_RESUMPTION --> R57_RESOLVE_BOT_THREADS: disposition only
         J55_ASSESS_THREADS --> G60_MERGE_GATE: queue empty
     }
 
@@ -506,25 +512,24 @@ not transition out of, rewrite, or reset the terminal run.
 | `P44_REMEDIATE` | Remediation route is valid and fewer than three passes are used | `J34_AUTHOR_FIX` | A required fourth pass, or P0-P2 after pass three, escalates. |
 | `P45_PHASE1_ACCEPTED` | Review binds current head | `R50_PUSH` | Stale review returns to assessment. |
 | `R50_PUSH` | Remote feature ref equals head | `R51_CREATE_PR` | Any main destination escalates. |
-| `R51_CREATE_PR` | PR targets main and body closes exact issue | `R52_REQUEST_REVIEW` | Malformed PR state escalates. |
+| `R51_CREATE_PR` | PR targets main and body closes exact issue | `R52_REQUEST_REVIEW` | Bind `code_lawyer_pull_request` to the new PR and set its pass count to zero. |
 | `R52_REQUEST_REVIEW` | Both fixed reviewer requests exist | `R53_WAIT_REVIEW` | A failed request effect escalates. |
 | `R53_WAIT_REVIEW` | Reviewer incomplete and time remains | `R53_WAIT_REVIEW` | Subtract witnessed elapsed time; poll no faster than 60 seconds. |
 | `R53_WAIT_REVIEW` | Every reviewer done by rule or deadline | `R54_CODE_LAWYER_INTAKE` | Deadline is completion, not approval. |
 | `R54_CODE_LAWYER_INTAKE` | Queue is empty | `G60_MERGE_GATE` | No Code Lawyer pass is consumed. |
-| `R54_CODE_LAWYER_INTAKE` | Queue built from unresolved bot threads; no autonomous pass used | `J55_ASSESS_THREADS` | Set `code_lawyer_passes_used = 1`; human threads remain untouched. |
+| `R54_CODE_LAWYER_INTAKE` | Queue built from unresolved bot threads; current PR has no autonomous pass | `J55_ASSESS_THREADS` | Set the current PR's `code_lawyer_passes_used = 1`; human threads remain untouched. |
 | `J55_ASSESS_THREADS` | Queue empty | `G60_MERGE_GATE` | Outcomes complete. |
 | `J55_ASSESS_THREADS` | Valid fixable finding and autonomous or operator remediation authority remains | `R56_APPLY_THREAD_FIX` | No counter reset or implicit additional pass. |
-| `J55_ASSESS_THREADS` | Gate-admissible outcome exists and disposition-only authority names the thread | `R57_RESOLVE_BOT_THREADS` | Repository mutation and review-request effects are absent. |
-| `J55_ASSESS_THREADS` | Finding cannot safely progress and mode is not `DispositionOnly` | `R57_RESOLVE_BOT_THREADS` | Record `BLOCKED`; gate will close. |
-| `J55_ASSESS_THREADS` | Disposition-only authority cannot derive a gate-admissible outcome | `ESCALATED` | Reject without reply, resolution, or repository mutation. |
+| `J55_ASSESS_THREADS` | Autonomous or remediation assessment derives a gate-admissible outcome | `R57_RESOLVE_BOT_THREADS` | Reply and resolution use the derived outcome without repository mutation. |
+| `J55_ASSESS_THREADS` | Finding cannot safely progress | `R57_RESOLVE_BOT_THREADS` | Record `BLOCKED`; gate will close. |
 | `R56_APPLY_THREAD_FIX` | Patch tested, committed, pushed | `R57_RESOLVE_BOT_THREADS` | Any failure records `BLOCKED`; no hidden retry loop. |
 | `R57_RESOLVE_BOT_THREADS` | Outcome reply exists for bot thread | `R58_CODE_LAWYER_RECHECK` | Human author means no resolution effect. |
-| `R58_CODE_LAWYER_RECHECK` | New bot threads and fewer than two passes used | `J55_ASSESS_THREADS` | Increment pass count. |
-| `R58_CODE_LAWYER_RECHECK` | New bot threads and two autonomous passes used | `ESCALATED` | Exact thread ids recorded; autonomous count remains two. |
+| `R58_CODE_LAWYER_RECHECK` | New bot threads and current PR has fewer than two passes used | `J55_ASSESS_THREADS` | Increment the current PR's pass count. |
+| `R58_CODE_LAWYER_RECHECK` | New bot threads and current PR has two autonomous passes used | `ESCALATED` | Exact thread ids recorded; current PR count remains two. |
 | `R58_CODE_LAWYER_RECHECK` | Operator-authorized run observes an unadmitted thread | `ESCALATED` | No authorization widening or implicit new bot cycle. |
 | `R58_CODE_LAWYER_RECHECK` | No new bot thread | `G60_MERGE_GATE` | Queue stable. |
 | `R59_OPERATOR_AUTHORIZED_RESUMPTION` | Fresh unexpired mode is `RemediationPass`, named threads are exact, and no operator remediation pass was used | `J55_ASSESS_THREADS` | Atomically set `consumed_at` and `operator_remediation_passes_used = 1`; autonomous count is unchanged. |
-| `R59_OPERATOR_AUTHORIZED_RESUMPTION` | Fresh unexpired mode is `DispositionOnly`, named threads are exact, and admitted evidence permits a gate-admissible outcome | `J55_ASSESS_THREADS` | Atomically set `consumed_at`; patch, commit, push, and review-request effects remain unavailable. |
+| `R59_OPERATOR_AUTHORIZED_RESUMPTION` | Fresh unexpired mode is `DispositionOnly`, named threads are exact, and its admitted dispositions are gate-admissible | `R57_RESOLVE_BOT_THREADS` | Atomically set `consumed_at`; no assessment, patch, commit, push, or review-request effect occurs. |
 | `R59_OPERATOR_AUTHORIZED_RESUMPTION` | Authorization is broad, reused, mismatched, or requests a second operator remediation pass | `ESCALATED` | Reject without thread or repository mutation. |
 | `G60_MERGE_GATE` | All five criteria true in order | `G62_MERGE` | Gate-open record committed. |
 | `G60_MERGE_GATE` | First false criterion has closed once | `G61_GATE_REMEDIATION` | Increment that criterion count. |
@@ -656,7 +661,8 @@ AssessDiffIntent(
     reproduced: Boolean,
     evidence
   }>,
-  dependency_assessment: Optional<{
+  dependency_assessments: Bounded<{
+    thread_id,
     evidence_id,
     consumer_change_required: Boolean,
     rationale: BoundedText
@@ -670,7 +676,10 @@ reproduction backed by supplied evidence, `FIXED` from current-head validation,
 change flag is false, and `DEFERRED` only from a routed issue reference. The
 host projects repository, issue, PR, and commit identities from admitted
 dependency evidence; the model cannot invent or replace them. An unexplained
-false value or an unknown evidence identity is malformed.
+false value, an unknown evidence identity, a duplicate `thread_id`, or a
+`thread_id` outside `review_threads` is malformed. The host joins each
+assessment to its exact consumer thread by `thread_id`; no finding inherits
+another thread's producer evidence.
 
 ### `SelectTieTask`
 
@@ -761,12 +770,14 @@ Every non-terminal state has a path to a terminal:
 3. Finding-classification self-loops decrement a finite finding count.
 4. Bot polling subtracts witnessed elapsed time from a 15-minute budget. At
    zero, the reviewer is deterministically complete for this run.
-5. Code Lawyer consumes at most two autonomous passes. A required third
-   autonomous pass transitions to `ESCALATED`. A new run may consume at most
-   one exact operator-authorized remediation pass; its counter cannot reset. A
-   disposition-only authorization decrements a finite named-thread set and
-   cannot enter a patch, commit, push, or review-request state. Any unadmitted
-   thread escalates.
+5. Code Lawyer consumes at most two autonomous passes per pull request. A new
+   PR binds a fresh zero count; resuming the same PR retains its count. A
+   required third autonomous pass transitions to `ESCALATED`. A new run may
+   consume at most one exact operator-authorized remediation pass; its counter
+   cannot reset. A disposition-only authorization decrements a finite
+   named-thread set and proceeds directly to reply and resolution; it cannot
+   enter assessment, patch, commit, push, or review-request states. Any
+   unadmitted thread escalates.
 6. A failed merge criterion gets one bounded remediation/re-observation.
    Closing the same criterion twice transitions to `ESCALATED`. Since the gate
    has five criteria, criterion rotation cannot create an infinite loop.

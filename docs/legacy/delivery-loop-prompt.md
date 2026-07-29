@@ -176,6 +176,8 @@ gh pr create --base main --fill --body "<intent>. Closes #<issue-number>."
 ```
 
 Commit messages and PR body: terse, systems-oriented, precise rule language. No narration.
+Creating a new pull request initializes its autonomous Code Lawyer pass count
+to zero. Resuming the same pull request retains its existing count.
 
 #### 4.3 Phase 2 — Bot review, bounded
 
@@ -248,6 +250,7 @@ Both protocols live as files, not inline text: `.agent/self-code-review.md` and 
   pull_request_head: <full commit oid>
   mode: RemediationPass | DispositionOnly
   thread_ids: <nonempty exact bot-thread id set>
+  dispositions: <exact thread-to-admitted-disposition map>
   issued_at: <witnessed timestamp>
   expires_at: <later witnessed timestamp>
   consumed_at: <none | witnessed timestamp>
@@ -257,6 +260,9 @@ Both protocols live as files, not inline text: `.agent/self-code-review.md` and 
   already consumed, replayed, head-mismatched, or thread-mismatched record
   before any reply or repository action. Entering either mode atomically
   records `consumed_at`; the disjoint mode cannot be changed or reused.
+  `RemediationPass` requires an empty disposition map. `DispositionOnly`
+  requires one already-admitted gate-admissible disposition for every named
+  thread and proceeds directly to reply and resolution without reassessment.
 - An operator-authorized additional remediation pass is bound to the exact
   escalated PR head and named thread identifiers. It cannot admit a different
   finding and cannot reset either autonomous pass.
