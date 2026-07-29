@@ -70,20 +70,25 @@ Prove the existing compiler and runtime seam without external effects:
 5. obstruct duplicate submission while exposing equal before/after
    application-state roots and typed target-value digests;
 6. refuse an altered pre-Tick basis; and
-7. prove replay equivalence.
+7. prove replay equivalence; and
+8. retain the exact compiler-authored typed application result through
+   independent verification, scheduler evaluation, and WAL recovery.
 
 Roadmap A ends when the standalone witness passes without a runtime fake,
 native application callback, handwritten package, or host-checkout path.
 
-The standalone witness now covers all seven steps with one Action in one Tick.
+The standalone witness now covers all eight steps with one Action in one Tick.
 The generic runner reopens one persisted WAL for pending and decided recovery;
 the external suite separately proves byte-identical deterministic reruns from
 the same empty-WAL basis. Duplicate no-mutation proof compares Echo-produced
 graph-only application-state roots and typed target-value digests; it does not
 mistake the legitimately extended WAL, Tick history, or Receipt evidence for
-application mutation. This is a singleton scheduler proof, not a claim that the
-permanent multi-Action Tick model is complete. Roadmap A.1 begins only after the
-runtime witness lands on `main`.
+application mutation. The application result remains the exact canonical
+`GreetingCreated { key, message }` value declared by Edict; Echo reports and
+recovers generic typed bytes without application-specific reconstruction. This
+is a singleton scheduler proof, not a claim that the permanent multi-Action
+Tick model is complete. Roadmap A.1 begins only after the runtime witness lands
+on `main`.
 
 ## Roadmap A.1 — Hello Effect
 
