@@ -24,8 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   request and claim recovery, capability-rooted settlement, idempotent and
   conflicting retry, effect-free replay, rootless ambiguous outcome settlement,
   post-claim aperture-substitution refusal, distinct compiler-artifact and
-  runtime-request admission errors, path and budget refusals, fixed-seed cases,
-  and bounded stress.
+  runtime-request admission errors at every phase boundary, checkout-independent
+  artifact paths, path and budget refusals, fixed-seed cases, and bounded
+  stress.
 
 ### Changed
 
