@@ -135,8 +135,8 @@ bounded workspace adapter. It proves:
 
 The fixed suite contains one ordered golden path, one idempotent retry, one
 conflicting retry, one rootless replay, one fresh-world observation, one
-ambiguous outcome, three path refusals, three cases derived from fixed seed
-`70110`, and eight bounded stress worldlines. Reports contain compiler and
+ambiguous outcome, four path-or-basis refusals, three cases derived from fixed
+seed `70110`, and eight bounded stress worldlines. Reports contain compiler and
 causal identities but no producer-checkout or workspace-root paths.
 
 Edict declares `workspace.snapshot.observe@1`; Echo durably coordinates it; the
