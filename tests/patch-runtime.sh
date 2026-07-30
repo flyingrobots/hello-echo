@@ -144,6 +144,12 @@ complete_success_case() {
       and (.settlement.patch.beforeContentDigest | test("^[0-9a-f]{64}$"))
       and (.settlement.patch.afterContentDigest | test("^[0-9a-f]{64}$"))
       and (.settlement.patch.resultingBasis | test("^[0-9a-f]{64}$"))
+      and (.settlement.attemptId | test("^[0-9a-f]{64}$"))
+      and (.settlement.basisDigest | test("^[0-9a-f]{64}$"))
+      and (.settlement.externalEvidenceDigest | test("^[0-9a-f]{64}$"))
+      and .settlement.basisDigest == .settlement.patch.requestBasis
+      and .settlement.externalEvidenceDigest == .settlement.patch.evidence
+      and .settlement.patch.evidence == .settlement.patch.resultingBasis
       and .settlement.patch.obstruction == null
       and (.settlement.commitDigest | test("^[0-9a-f]{64}$"))
       and (.settlement.resultDigest | test("^[0-9a-f]{64}$"))
@@ -300,6 +306,9 @@ jq -e '
   .settlement.kind == "succeeded"
   and .settlement.patch.beforeContentDigest == null
   and (.settlement.patch.afterContentDigest | test("^[0-9a-f]{64}$"))
+  and .settlement.basisDigest == .settlement.patch.requestBasis
+  and .settlement.externalEvidenceDigest == .settlement.patch.evidence
+  and .settlement.patch.evidence == .settlement.patch.resultingBasis
 ' "$reconcile_root/reconcile-report.json" >/dev/null
 test "$(cat "$reconcile_workspace/$reconcile_path")" = after
 
@@ -332,6 +341,9 @@ jq -e '
   .settlement.kind == "outcomeUnknown"
   and .settlement.patch.status == "outcomeUnknown"
   and .settlement.patch.obstruction == "postcondition-not-observed"
+  and (.settlement.attemptId | test("^[0-9a-f]{64}$"))
+  and .settlement.basisDigest == .settlement.patch.requestBasis
+  and .settlement.externalEvidenceDigest == .settlement.patch.evidence
 ' "$unknown_root/reconcile-report.json" >/dev/null
 test "$(cat "$unknown_workspace/ambiguous.txt")" = ambiguous
 
