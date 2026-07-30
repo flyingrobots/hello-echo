@@ -23,6 +23,7 @@ use warp_core::external_action_adapter::{
     admit_edict_external_action_request_v1, bounded_workspace_observation_basis_v1,
     encode_bounded_workspace_observation_input_v1, AdmittedEdictExternalActionRequestV1,
     BoundedWorkspaceObservationAdapterV1, BoundedWorkspaceObservationProfileV1,
+    EdictExternalActionAdmissionErrorV1,
 };
 use warp_core::{Hash, WorldlineId};
 
@@ -85,10 +86,15 @@ fn run() -> Result<(), String> {
         &application_input,
     ) {
         Ok(admitted) => admitted,
-        Err(_) if invocation.phase == "request" => {
+        Err(error) if invocation.phase == "request" => {
+            let obstruction = if is_compiler_artifact_rejection(&error) {
+                "compilerArtifactRejected"
+            } else {
+                "requestRejected"
+            };
             print_json(&json!({
                 "phase": "request",
-                "obstruction": "compilerArtifactRejected",
+                "obstruction": obstruction,
                 "wal": {"commitCount": 0}
             }))?;
             std::process::exit(3);
@@ -142,7 +148,7 @@ fn application_input(request_case: &RequestCase) -> Result<Vec<u8>, String> {
         ("payload", CanonicalValueV1::Bytes(operation_input)),
         (
             "scope",
-            CanonicalValueV1::Bytes(digest(&request_case.scope).to_vec()),
+            CanonicalValueV1::Bytes(authority_scope(request_case).to_vec()),
         ),
         (
             "basis",
@@ -155,6 +161,50 @@ fn application_input(request_case: &RequestCase) -> Result<Vec<u8>, String> {
         ("maxAttempts", CanonicalValueV1::Integer(1)),
     ]))
     .map_err(|error| format!("application input encoding failed: {error:?}"))
+}
+
+fn authority_scope(request_case: &RequestCase) -> Hash {
+    let mut permitted_paths = request_case
+        .permitted_paths
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    permitted_paths.sort_unstable();
+    permitted_paths.dedup();
+
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(b"hello-effect:authority-scope:v1\0");
+    hash_length_delimited(&mut hasher, request_case.scope.as_bytes());
+    hasher.update(
+        &u64::try_from(permitted_paths.len())
+            .unwrap_or(u64::MAX)
+            .to_le_bytes(),
+    );
+    for path in permitted_paths {
+        hash_length_delimited(&mut hasher, path.as_bytes());
+    }
+    hasher.finalize().into()
+}
+
+fn hash_length_delimited(hasher: &mut blake3::Hasher, bytes: &[u8]) {
+    hasher.update(&u64::try_from(bytes.len()).unwrap_or(u64::MAX).to_le_bytes());
+    hasher.update(bytes);
+}
+
+fn is_compiler_artifact_rejection(error: &EdictExternalActionAdmissionErrorV1) -> bool {
+    matches!(
+        error,
+        EdictExternalActionAdmissionErrorV1::Canonical(_)
+            | EdictExternalActionAdmissionErrorV1::ArtifactShape
+            | EdictExternalActionAdmissionErrorV1::RequestCardinality
+            | EdictExternalActionAdmissionErrorV1::CallableStepsPresent
+            | EdictExternalActionAdmissionErrorV1::MissingSemanticClosure
+            | EdictExternalActionAdmissionErrorV1::CoreDigestMismatch
+            | EdictExternalActionAdmissionErrorV1::TargetDerivationMismatch
+            | EdictExternalActionAdmissionErrorV1::CapabilityClosureMismatch
+            | EdictExternalActionAdmissionErrorV1::UnsupportedExpression
+            | EdictExternalActionAdmissionErrorV1::InvalidDigest
+    )
 }
 
 fn expected_basis(request_case: &RequestCase) -> Result<Hash, String> {

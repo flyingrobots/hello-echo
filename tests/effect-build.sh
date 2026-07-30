@@ -4,6 +4,9 @@ set -eu
 : "${EDICT_REPO:?set EDICT_REPO to the compatible Edict checkout}"
 : "${ECHO_REPO:?set ECHO_REPO to the compatible Echo checkout}"
 
+EDICT_REPO=$(CDPATH='' cd -- "$EDICT_REPO" && pwd -P)
+ECHO_REPO=$(CDPATH='' cd -- "$ECHO_REPO" && pwd -P)
+
 test -f "$EDICT_REPO/crates/edict-cli/Cargo.toml"
 test -f "$ECHO_REPO/crates/warp-core/Cargo.toml"
 
