@@ -31,9 +31,10 @@ use warp_core::validated_workspace_patch::{
 use warp_core::{Hash, WorldlineId};
 
 const SEGMENT_ID: WalSegmentId = WalSegmentId::from_raw(1);
+const MAX_FILE_BYTES_V1: u64 = 65_536;
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct RequestCase {
     worldline_byte: u8,
     intent: String,
@@ -41,18 +42,17 @@ struct RequestCase {
     observation: WorkspaceObservation,
     permitted_paths: Vec<String>,
     max_settlement_bytes: u64,
-    max_file_bytes: u64,
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct PatchProposal {
     path: String,
     replacement_bytes_hex: String,
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct WorkspaceObservation {
     path: String,
     bytes_hex: String,
@@ -79,10 +79,19 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let invocation = parse_invocation()?;
-    let request_case: RequestCase = serde_json::from_slice(
-        &fs::read(&invocation.request_file).map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())?;
+    let request_bytes = fs::read(&invocation.request_file).map_err(|error| error.to_string())?;
+    let request_case: RequestCase = match serde_json::from_slice(&request_bytes) {
+        Ok(request_case) => request_case,
+        Err(_) => {
+            let commit_count = wal_commit_count(&invocation.wal_dir)?;
+            print_json(&json!({
+                "phase": invocation.phase,
+                "obstruction": "requestRejected",
+                "wal": {"commitCount": commit_count}
+            }))?;
+            std::process::exit(3);
+        }
+    };
     let core_bytes = fs::read(&invocation.core_file).map_err(|error| error.to_string())?;
     let target_ir_bytes =
         fs::read(&invocation.target_ir_file).map_err(|error| error.to_string())?;
@@ -168,6 +177,11 @@ fn application_input(request_case: &RequestCase) -> Result<Vec<u8>, String> {
     }
     let before = decode_hex(&request_case.observation.bytes_hex)?;
     let replacement = decode_hex(&request_case.proposal.replacement_bytes_hex)?;
+    let max_file_bytes =
+        usize::try_from(MAX_FILE_BYTES_V1).map_err(|_| "file budget was not representable")?;
+    if before.len() > max_file_bytes || replacement.len() > max_file_bytes {
+        return Err("patch data exceeded the host file budget".to_owned());
+    }
     let patch = encode_validated_workspace_patch_input_v1(
         request_case.proposal.path.clone(),
         blake3::hash(&before).into(),
@@ -247,7 +261,7 @@ fn claim_phase(
     let recorded = coordinator
         .recorded_request(request.request_id())
         .map_err(|error| format!("request recovery failed: {error:?}"))?;
-    let profile = adapter_profile(admitted, request_case.max_file_bytes);
+    let profile = adapter_profile(admitted);
     let binding = ExternalActionAdapterBindingV1 {
         adapter_id: profile.adapter_id,
         operation_id: profile.operation_id,
@@ -317,7 +331,7 @@ fn apply_phase(
     let adapter = ValidatedWorkspacePatchAdapterV1::open(
         workspace_root,
         request_case.permitted_paths.clone(),
-        adapter_profile(admitted, request_case.max_file_bytes),
+        adapter_profile(admitted),
     )
     .map_err(|error| format!("adapter open failed: {error:?}"))?;
     let candidate = adapter
@@ -360,7 +374,7 @@ fn reconcile_phase(
     let reconciler = ValidatedWorkspacePatchReconcilerV1::open(
         workspace_root,
         request_case.permitted_paths.clone(),
-        adapter_profile(admitted, request_case.max_file_bytes),
+        adapter_profile(admitted),
     )
     .map_err(|error| format!("reconciler open failed: {error:?}"))?;
     let candidate = reconciler
@@ -615,7 +629,6 @@ fn adapter_id() -> ExternalActionAdapterIdV1 {
 
 fn adapter_profile(
     admitted: &AdmittedEdictExternalActionRequestV1,
-    max_file_bytes: u64,
 ) -> ValidatedWorkspacePatchProfileV1 {
     let request = admitted.request();
     ValidatedWorkspacePatchProfileV1 {
@@ -625,7 +638,7 @@ fn adapter_profile(
         reconciliation_law_digest: request.reconciliation_law_digest,
         authority_scope_digest: request.authority_scope_digest,
         adapter_id: adapter_id(),
-        max_file_bytes,
+        max_file_bytes: MAX_FILE_BYTES_V1,
     }
 }
 
