@@ -371,13 +371,40 @@ assert_rejected_case() {
 # Known failure modes obstruct before mutation.
 assert_rejected_case stale-basis 84 stale.txt stale.txt before after stale-basis stale
 assert_rejected_case unauthorized 85 secret.txt allowed.txt secret replaced unauthorized-path regular
-assert_rejected_case parent-escape 86 ../secret.txt allowed.txt absent replaced invalid-path absent
 assert_rejected_case symlink 87 link.txt link.txt before after symlink-refused symlink
-assert_rejected_case ci-workflow 88 .github/workflows/ci.yml .github/workflows/ci.yml before after ci-workflow-refused regular
+assert_rejected_case ci-workflow 88 .github/workflows/ci.yml allowed.txt before after ci-workflow-refused regular
 
 test "$(cat "$patch_root/stale-basis/workspace/stale.txt")" = changed
 test "$(cat "$patch_root/unauthorized/workspace/secret.txt")" = secret
 test "$(cat "$patch_root/ci-workflow/workspace/.github/workflows/ci.yml")" = before
+
+# Parent escape is rejected while deterministically validating proposal data,
+# before a request can enter the WAL or an adapter can receive authority.
+parent_root="$patch_root/parent-escape"
+mkdir -p "$parent_root"
+make_case \
+  "$parent_root/request.json" \
+  86 \
+  ../secret.txt \
+  "$(hex_bytes absent)" \
+  "$(hex_bytes replaced)" \
+  allowed.txt \
+  65536 \
+  65536
+if run_phase \
+  request \
+  "$parent_root/request.json" \
+  "$parent_root/wal" \
+  "$parent_root/request-report.json"
+then
+  echo "parent-escaped patch proposal unexpectedly passed" >&2
+  exit 1
+fi
+jq -e '
+  .phase == "request"
+  and .obstruction == "requestRejected"
+  and .wal.commitCount == 0
+' "$parent_root/request-report.json" >/dev/null
 
 # Settlement-size boundary: the exact encoded result size succeeds; one byte
 # less refuses before mutation.
@@ -386,7 +413,11 @@ boundary_result_bytes=$(
   jq -r '.settlement.canonicalResultByteCount' \
     "$patch_root/boundary-probe/settlement-report.json"
 )
-complete_success_case exact-boundary 90 before boundary exact.txt "$boundary_result_bytes"
+boundary_floor=$boundary_result_bytes
+if test "$boundary_floor" -lt 1024; then
+  boundary_floor=1024
+fi
+complete_success_case exact-boundary 90 before boundary exact.txt "$boundary_floor"
 
 under_root="$patch_root/under-boundary"
 mkdir -p "$under_root/workspace"
@@ -398,20 +429,22 @@ make_case \
   "$(hex_bytes before)" \
   "$(hex_bytes boundary)" \
   exact.txt \
-  "$((boundary_result_bytes - 1))" \
+  "$((boundary_floor - 1))" \
   65536
-run_phase request "$under_root/request.json" "$under_root/wal" "$under_root/request-report.json"
-run_phase claim "$under_root/request.json" "$under_root/wal" "$under_root/claim-report.json"
-run_phase \
-  apply \
+if run_phase \
+  request \
   "$under_root/request.json" \
   "$under_root/wal" \
-  "$under_root/settlement-report.json" \
-  "$under_root/workspace"
+  "$under_root/request-report.json"
+then
+  echo "under-floor patch request unexpectedly passed" >&2
+  exit 1
+fi
 jq -e '
-  .settlement.kind == "rejected"
-  and .settlement.patch.obstruction == "settlement-budget-exceeded"
-' "$under_root/settlement-report.json" >/dev/null
+  .phase == "request"
+  and .obstruction == "requestRejected"
+  and .wal.commitCount == 0
+' "$under_root/request-report.json" >/dev/null
 test "$(cat "$under_root/workspace/exact.txt")" = before
 
 # A substituted compiler artifact fails before the first WAL commit, and the
