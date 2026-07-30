@@ -132,11 +132,22 @@ Add `ApplyValidatedPatch` only after read-only observation is green:
 - settlement records the resulting basis or `outcome_unknown`; and
 - replay never reapplies the patch.
 
+The `workspace.patch.applyValidated@1` consumer proof now satisfies this phase.
+Exact Edict Core and Target IR artifacts construct the request without callable
+write effects. Proposal data is deterministically encoded against admitted
+observation evidence and an exact writable aperture. Echo records request and
+claim before only its generic adapter receives the workspace root. Settlement
+precedes publication; exact retry and replay are effect-free; ambiguous
+postconditions reconcile to either the observed success or `outcomeUnknown`;
+and path, basis, symlink, CI-workflow, budget, and compiler-artifact violations
+fail closed at their owning boundaries.
+
 No generic process, filesystem, or network capability is introduced.
 
-Roadmap A.1 is four of five phases complete: Echo durable external actions,
-Edict typed external requests, Echo bounded observation, and this external
-consumer proof are complete. Basis-bound validated patch application remains.
+Roadmap A.1 is five of five phases complete: Echo durable external actions,
+Edict typed external requests, Echo bounded observation, the external
+observation consumer proof, and basis-bound validated patch application are
+complete.
 
 ## Roadmap B — Graft hosted by Echo
 

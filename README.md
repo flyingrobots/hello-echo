@@ -160,3 +160,56 @@ process, network, or model authority and introduces no application callback.
 
 No artifact in this repository may be replaced by a handwritten Echo package,
 and no native Hello Echo callback may implement application semantics.
+
+## Hello Effect validated patch application
+
+The second external-effect proof consumes the completed observation boundary
+as basis evidence and applies one compiler-authored validated patch:
+
+```sh
+EDICT_REPO=/path/to/edict \
+ECHO_REPO=/path/to/echo \
+./tests/patch-runtime.sh
+```
+
+The build corroborates the exact Edict source, lawpack closure, digest
+sidecars, Core artifact, and Target IR artifact for
+`workspace.patch.applyValidated@1`. Edict emits request data only. The compiler
+provider receives no filesystem authority and emits no executable-operation
+package.
+
+The request JSON separates untrusted `proposal` data from the admitted
+`observation` basis. The host uses Echo's generic validated-patch encoder and
+authority functions; it does not reconstruct patch policy or perform native
+application semantics. Echo durably records the request and claim before only
+the bounded adapter receives a workspace root.
+
+The runtime witness proves:
+
+- request and claim commit before mutation, across separate processes;
+- recovery exposes pending requested and claimed states without workspace
+  authority;
+- the adapter can mutate only an exact permitted path under the admitted
+  observation basis;
+- the canonical settlement commits before the result is reported;
+- exact retry is effect-free and conflicting retry obstructs without WAL
+  growth;
+- replay accepts no workspace root and does not reapply a settled patch after
+  the file changes again;
+- a crash after mutation but before settlement reconciles from the observed
+  postcondition without inventing pre-state evidence;
+- an ambiguous postcondition settles as `outcomeUnknown` without another
+  mutation;
+- stale basis, unauthorized path, parent escape, symlink, and CI-workflow
+  policy failures obstruct before mutation;
+- the exact request-only settlement floor passes and one byte less refuses
+  before a WAL commit;
+- compiler-artifact substitution fails at request and recovery boundaries
+  without hidden WAL growth; and
+- fixed-seed text, Unicode, and binary replacements plus eight bounded stress
+  worldlines pass.
+
+The model-facing surface is data only. Edict owns the request declaration,
+Echo owns admission and durable coordination, and the adapter alone owns the
+bounded write. No generic filesystem write, process, network, Git, or model
+authority is introduced.
