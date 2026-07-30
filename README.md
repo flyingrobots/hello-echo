@@ -181,8 +181,10 @@ package.
 The request JSON separates untrusted `proposal` data from the admitted
 `observation` basis. The host uses Echo's generic validated-patch encoder and
 authority functions; it does not reconstruct patch policy or perform native
-application semantics. Echo durably records the request and claim before only
-the bounded adapter receives a workspace root.
+application semantics. The proposal and observation are closed schemas, and
+the adapter's 65,536-byte file cap is host-owned rather than caller-selected.
+Echo durably records the request and claim before only the bounded adapter
+receives a workspace root.
 
 The runtime witness proves:
 
