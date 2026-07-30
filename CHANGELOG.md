@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   seam.
 - Syntax-independent delivery-loop phase graph with guarded transitions,
   declared effects, bounded judgment leaves, and terminal reachability.
+- Compiler-authored bounded workspace observation witness covering durable
+  request and claim recovery, capability-rooted settlement, idempotent and
+  conflicting retry, effect-free replay, rootless ambiguous outcome settlement,
+  post-claim aperture-substitution refusal, distinct compiler-artifact and
+  runtime-request admission errors at every phase boundary, checkout-independent
+  artifact paths, path and budget refusals, fixed-seed cases, and bounded
+  stress.
 
 ### Changed
 

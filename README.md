@@ -95,5 +95,68 @@ each generic runner invocation; the deterministic rerun is separate evidence.
 This is singleton scheduler integration: one Action in one Tick. It does not
 claim permanent multi-Action Tick composition or introduce external effects.
 
+## Hello Effect workspace observation
+
+The first external-effect proof is separate from the pure Hello Echo runtime.
+Run it with the same compatible producer checkouts:
+
+```sh
+EDICT_REPO=/path/to/edict \
+ECHO_REPO=/path/to/echo \
+./tests/effect-runtime.sh
+```
+
+The build corroborates the Edict source and complete `workspace.snapshot@1`
+lawpack closure byte-for-byte, then uses Edict's public `externalAction` build
+to emit the exact compiler-owned Core and Echo Target IR request artifacts. It
+does not emit an executable-operation package or invoke an effect through the
+compiler/provider seam.
+
+The public shell boundary canonicalizes producer checkout paths before
+serializing them into the generated Cargo manifest. Relative compiler-artifact
+overrides are resolved from the application root, independent of the caller's
+working directory.
+
+The runtime witness uses Echo's public generic external-action coordinator and
+bounded workspace adapter. It proves:
+
+- request and claim WAL commits occur in separate host processes before the
+  requested file exists;
+- recovery exposes requested and claimed pending states without filesystem
+  authority;
+- only the capability-rooted adapter receives the workspace directory and
+  exact permitted paths;
+- the canonical settlement is committed before its value becomes
+  consumer-visible;
+- an identical settlement retry returns the original admission without another
+  WAL commit, while a kind-only conflict obstructs without mutation;
+- replay accepts no workspace root, retains observed value A after the complete
+  source root is removed, and does not re-enter the adapter;
+- a fresh request on a new worldline observes later value B;
+- `outcomeUnknown` remains distinct from failure, requires no workspace root,
+  and settles after the source directory is removed;
+- the exact permitted path aperture is part of durable request identity, so
+  post-claim aperture substitution cannot recover the claim;
+- unauthorized, parent-escaped, symlink, and stale-basis paths settle as typed
+  refusals;
+- the exact settlement-size boundary succeeds and one byte less refuses; and
+- substituted compiler artifacts are rejected with the same typed obstruction
+  at request and recovery boundaries without appending to the WAL, while
+  invalid runtime requests remain a distinct pre-commit refusal.
+
+The fixed suite contains one ordered golden path, one relative
+compiler-artifact path probe, one idempotent retry, one conflicting retry, one
+aperture substitution, one rootless replay, one fresh-world observation, one
+rootless ambiguous outcome, four path-or-basis refusals, one boundary probe,
+two boundary cases, two compiler-artifact refusals, one runtime-request
+refusal, three cases derived from fixed seed `70110`, and eight bounded stress
+worldlines. Every retained JSON artifact is checked for producer-checkout path
+leaks. Reports contain compiler and causal identities but no producer-checkout
+or workspace-root paths.
+
+Edict declares `workspace.snapshot.observe@1`; Echo durably coordinates it; the
+adapter alone reads the workspace. This proof grants Edict no filesystem,
+process, network, or model authority and introduces no application callback.
+
 No artifact in this repository may be replaced by a handwritten Echo package,
 and no native Hello Echo callback may implement application semantics.
