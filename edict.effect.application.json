@@ -1,0 +1,21 @@
+{
+  "schema": "edict.application/v1",
+  "buildKind": "externalAction",
+  "coordinate": "examples.workspace_observer@1",
+  "sources": [
+    "effect/src/observe-workspace.edict"
+  ],
+  "lawpacks": [
+    {
+      "manifest": "effect/vendor/workspace-snapshot/manifest.cbor",
+      "exports": "effect/vendor/workspace-snapshot/exports.cbor",
+      "adapter": "effect/vendor/workspace-snapshot/adapter.cbor",
+      "targetConfiguration": "effect/vendor/workspace-snapshot/request-profile-configuration.cbor"
+    }
+  ],
+  "target": {
+    "profile": "echo.dpo@1",
+    "providerPackage": ".build/effect/echo-provider"
+  },
+  "outputDirectory": ".build/effect/application"
+}
