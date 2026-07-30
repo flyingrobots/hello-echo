@@ -23,6 +23,14 @@ esac
 
 core_file=${EFFECT_CORE_FILE:-"$project_root/.build/effect/application/core.cbor"}
 target_ir_file=${EFFECT_TARGET_IR_FILE:-"$project_root/.build/effect/application/target-ir.cbor"}
+case "$core_file" in
+  /*) ;;
+  *) core_file="$project_root/$core_file" ;;
+esac
+case "$target_ir_file" in
+  /*) ;;
+  *) target_ir_file="$project_root/$target_ir_file" ;;
+esac
 
 exec "$project_root/.build/effect/host-target/debug/hello-effect-host" \
   "$phase" \

@@ -182,6 +182,19 @@ run_phase request "$golden_case" "$golden_wal" "$golden_root/request-report.json
 assert_posture "$golden_root/request-report.json" request requested 1
 test ! -e "$golden_workspace/$golden_path"
 
+project_root=$(pwd -P)
+(
+  cd "$effect_root"
+  EFFECT_CORE_FILE=.build/effect/application/core.cbor \
+    EFFECT_TARGET_IR_FILE=.build/effect/application/target-ir.cbor \
+    "$project_root/tests/effect-run.sh" \
+    inspect \
+    .build/effect-tests/golden/request.json \
+    .build/effect-tests/golden/wal \
+    >"$project_root/$golden_root/relative-artifact-report.json"
+)
+assert_posture "$golden_root/relative-artifact-report.json" inspect requested 1
+
 run_phase inspect "$golden_case" "$golden_wal" "$golden_root/request-recovery.json"
 assert_posture "$golden_root/request-recovery.json" inspect requested 1
 
@@ -555,7 +568,7 @@ done
 if grep -R -F \
   -e "$(CDPATH='' cd -- "$EDICT_REPO" && pwd -P)" \
   -e "$(CDPATH='' cd -- "$ECHO_REPO" && pwd -P)" \
-  "$effect_root"/*/*report.json \
+  "$effect_root"/*/*.json \
   >/dev/null
 then
   echo "Hello Effect witness disclosed a producer checkout path" >&2
@@ -563,4 +576,4 @@ then
 fi
 
 printf '%s\n' \
-  "Hello Effect suite passed: 1 ordered golden, 1 retry, 1 conflict, 1 aperture substitution, 1 replay, 1 fresh world, 1 rootless unknown, 4 refusals, 1 boundary probe, 2 boundaries, 1 artifact refusal, 1 request refusal, 3 fixed-seed property, 8 stress"
+  "Hello Effect suite passed: 1 ordered golden, 1 relative artifact path, 1 retry, 1 conflict, 1 aperture substitution, 1 replay, 1 fresh world, 1 rootless unknown, 4 refusals, 1 boundary probe, 2 boundaries, 2 artifact refusals, 1 request refusal, 3 fixed-seed property, 8 stress"

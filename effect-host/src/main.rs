@@ -86,20 +86,20 @@ fn run() -> Result<(), String> {
         &application_input,
     ) {
         Ok(admitted) => admitted,
-        Err(error) if invocation.phase == "request" => {
+        Err(error) => {
             let obstruction = if is_compiler_artifact_rejection(&error) {
                 "compilerArtifactRejected"
             } else {
                 "requestRejected"
             };
+            let commit_count = wal_commit_count(&invocation.wal_dir)?;
             print_json(&json!({
-                "phase": "request",
+                "phase": invocation.phase,
                 "obstruction": obstruction,
-                "wal": {"commitCount": 0}
+                "wal": {"commitCount": commit_count}
             }))?;
             std::process::exit(3);
         }
-        Err(error) => return Err(format!("compiler artifact admission failed: {error:?}")),
     };
 
     match invocation.phase.as_str() {
@@ -639,6 +639,13 @@ fn open_write_store(path: &Path) -> Result<FilesystemWalStore, String> {
 fn open_read_store(path: &Path) -> Result<FilesystemWalStore, String> {
     FilesystemWalStore::open(path, SEGMENT_ID)
         .map_err(|error| format!("filesystem WAL open failed: {error:?}"))
+}
+
+fn wal_commit_count(path: &Path) -> Result<usize, String> {
+    if !path.exists() {
+        return Ok(0);
+    }
+    Ok(open_read_store(path)?.read_commits().len())
 }
 
 fn recover(store: &FilesystemWalStore) -> Result<ExternalActionCoordinatorV1, String> {

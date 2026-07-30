@@ -4,6 +4,8 @@ set -eu
 : "${EDICT_REPO:?set EDICT_REPO to the compatible Edict checkout}"
 : "${ECHO_REPO:?set ECHO_REPO to the compatible Echo checkout}"
 
+command -v jq >/dev/null
+
 EDICT_REPO=$(CDPATH='' cd -- "$EDICT_REPO" && pwd -P)
 ECHO_REPO=$(CDPATH='' cd -- "$ECHO_REPO" && pwd -P)
 
@@ -58,8 +60,14 @@ test ! -e .build/effect/application/executable-operation-package.cbor
 test ! -e .build/effect/application/verification-report.cbor
 
 project_root=$(pwd -P)
-escaped_echo_repo=$(printf '%s' "$ECHO_REPO" | sed 's/[&|]/\\&/g')
-escaped_project_root=$(printf '%s' "$project_root" | sed 's/[&|]/\\&/g')
+escaped_echo_repo=$(
+  jq -Rn --arg value "$ECHO_REPO" '$value' |
+    sed -e 's/^"//' -e 's/"$//' -e 's/[\\&|]/\\&/g'
+)
+escaped_project_root=$(
+  jq -Rn --arg value "$project_root" '$value' |
+    sed -e 's/^"//' -e 's/"$//' -e 's/[\\&|]/\\&/g'
+)
 mkdir -p .build/effect/host
 sed \
   -e "s|@ECHO_REPO@|$escaped_echo_repo|g" \
