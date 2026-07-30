@@ -128,15 +128,22 @@ bounded workspace adapter. It proves:
 - replay accepts no workspace root, retains observed value A after the complete
   source root is removed, and does not re-enter the adapter;
 - a fresh request on a new worldline observes later value B;
-- `outcomeUnknown` remains distinct from failure;
-- unauthorized, parent-escaped, and symlink paths settle as typed refusals;
+- `outcomeUnknown` remains distinct from failure, requires no workspace root,
+  and settles after the source directory is removed;
+- the exact permitted path aperture is part of durable request identity, so
+  post-claim aperture substitution cannot recover the claim;
+- unauthorized, parent-escaped, symlink, and stale-basis paths settle as typed
+  refusals;
 - the exact settlement-size boundary succeeds and one byte less refuses; and
-- a substituted Core artifact is rejected before the first WAL commit.
+- substituted compiler artifacts and invalid runtime requests are distinguished
+  and rejected before the first WAL commit.
 
 The fixed suite contains one ordered golden path, one idempotent retry, one
-conflicting retry, one rootless replay, one fresh-world observation, one
-ambiguous outcome, four path-or-basis refusals, three cases derived from fixed
-seed `70110`, and eight bounded stress worldlines. Reports contain compiler and
+conflicting retry, one aperture substitution, one rootless replay, one
+fresh-world observation, one rootless ambiguous outcome, four path-or-basis
+refusals, one boundary probe, two boundary cases, one compiler-artifact
+refusal, one runtime-request refusal, three cases derived from fixed seed
+`70110`, and eight bounded stress worldlines. Reports contain compiler and
 causal identities but no producer-checkout or workspace-root paths.
 
 Edict declares `workspace.snapshot.observe@1`; Echo durably coordinates it; the

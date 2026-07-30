@@ -114,8 +114,10 @@ Echo durably records request, claim, and settlement across separate host
 processes. Recovery exposes pending work, exact retry is effect-free,
 conflicting retry obstructs, and replay retains the admitted observation after
 the entire workspace root is removed. A new worldline alone may observe a
-changed workspace. Path aperture, symlink, basis, terminal-size, and compiler
-artifact substitutions all fail closed.
+changed workspace. Explicit uncertainty settles without reopening the removed
+root. Post-claim aperture substitution cannot recover the durable claim, while
+path, symlink, basis, terminal-size, compiler-artifact, and runtime-request
+violations all fail closed at their owning boundary.
 
 ### Basis-bound write
 
