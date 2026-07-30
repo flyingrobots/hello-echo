@@ -463,6 +463,38 @@ jq -e '
   and .wal.commitCount == 0
 ' "$mutated_root/report.json" >/dev/null
 
+# Compiler-owned artifacts are re-admitted at every phase boundary. If they
+# diverge after request admission, the later phase must return the same typed
+# obstruction without appending to the existing WAL.
+post_request_mutation_root="$effect_root/post-request-mutated-artifact"
+mkdir -p "$post_request_mutation_root"
+make_case \
+  "$post_request_mutation_root/request.json" \
+  73 \
+  source.txt \
+  "$(hex_bytes 'source')" \
+  65536 \
+  source.txt
+run_phase \
+  request \
+  "$post_request_mutation_root/request.json" \
+  "$post_request_mutation_root/wal" \
+  "$post_request_mutation_root/request-report.json"
+if env EFFECT_CORE_FILE="$mutated_core" ./tests/effect-run.sh \
+  claim \
+  "$post_request_mutation_root/request.json" \
+  "$post_request_mutation_root/wal" \
+  >"$post_request_mutation_root/claim-report.json"
+then
+  echo "post-request substituted compiler artifact unexpectedly passed" >&2
+  exit 1
+fi
+jq -e '
+  .phase == "claim"
+  and .obstruction == "compilerArtifactRejected"
+  and .wal.commitCount == 1
+' "$post_request_mutation_root/claim-report.json" >/dev/null
+
 # Invalid runtime request data is not misreported as a compiler artifact
 # substitution and also fails before the first WAL commit.
 invalid_request_root="$effect_root/invalid-request"
