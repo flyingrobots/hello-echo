@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   runtime-request admission errors at every phase boundary, checkout-independent
   artifact paths, path and budget refusals, fixed-seed cases, and bounded
   stress.
+- Compiler-authored basis-bound patch witness covering request-before-write,
+  exact writable apertures, postcondition settlement, effect-free retry and
+  replay, crash reconciliation, ambiguous outcomes, path and basis refusals,
+  request-budget boundaries, compiler-artifact substitution, fixed-seed binary
+  replacements, and bounded stress.
 
 ### Changed
 
