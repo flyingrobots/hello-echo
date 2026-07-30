@@ -1,0 +1,16 @@
+[package]
+name = "hello-effect-patch-host"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+blake3 = "1"
+echo-edict-canonical = { path = "@ECHO_REPO@/crates/echo-edict-canonical" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+warp-core = { path = "@ECHO_REPO@/crates/warp-core" }
+
+[[bin]]
+name = "hello-effect-patch-host"
+path = "@PROJECT_ROOT@/patch-host/src/main.rs"
