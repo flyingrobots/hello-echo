@@ -519,6 +519,12 @@ fn report(
                 .ok_or_else(|| "settlement commit digest absent".to_owned())?;
             Ok::<_, String>(json!({
                 "kind": settlement_kind(settlement.kind),
+                "attemptId": hex(&settlement.attempt_id.as_hash()),
+                "basisDigest": hex(&settlement.basis_digest),
+                "externalEvidenceDigest": hex(&settlement.external_evidence_digest),
+                "schemaAdmissionEvidenceDigest": hex(
+                    &settlement.schema_admission_evidence_digest,
+                ),
                 "commitDigest": hex(&commit_digest),
                 "resultDigest": hex(&settlement.result_digest),
                 "canonicalResultByteCount": settlement.canonical_result_bytes.len(),
@@ -568,6 +574,8 @@ fn decode_patch_settlement(bytes: &[u8]) -> Result<Value, String> {
     Ok(json!({
         "status": canonical_text_field(&value, "posture")?,
         "path": canonical_optional_text_field(&value, "path")?,
+        "requestBasis": hex(canonical_bytes_field(&value, "requestBasis")?),
+        "evidence": hex(canonical_bytes_field(&value, "evidence")?),
         "beforeContentDigest": canonical_optional_bytes_hex_field(
             &value,
             "beforeContentDigest",
@@ -601,6 +609,13 @@ fn canonical_text_field(value: &CanonicalValueV1, field: &str) -> Result<String,
     match canonical_field(value, field)? {
         CanonicalValueV1::Text(value) => Ok(value.clone()),
         _ => Err(format!("canonical field {field} was not text")),
+    }
+}
+
+fn canonical_bytes_field<'a>(value: &'a CanonicalValueV1, field: &str) -> Result<&'a [u8], String> {
+    match canonical_field(value, field)? {
+        CanonicalValueV1::Bytes(value) => Ok(value),
+        _ => Err(format!("canonical field {field} was not bytes")),
     }
 }
 
