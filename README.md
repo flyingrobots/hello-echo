@@ -193,7 +193,9 @@ The runtime witness proves:
   authority;
 - the adapter can mutate only an exact permitted path under the admitted
   observation basis;
-- the canonical settlement commits before the result is reported;
+- the canonical settlement commits before the result is reported, and the
+  report cross-compares its attempt, request basis, external evidence,
+  postcondition digest, and resulting basis;
 - exact retry is effect-free and conflicting retry obstructs without WAL
   growth;
 - replay accepts no workspace root and does not reapply a settled patch after

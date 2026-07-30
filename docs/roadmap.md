@@ -140,9 +140,10 @@ closed schema, while the file cap remains host-owned and cannot be substituted
 after claim. Echo records request and claim before only its generic adapter
 receives the workspace root. Settlement precedes publication; exact retry and
 replay are effect-free; ambiguous postconditions reconcile to either the
-observed success or `outcomeUnknown`; and path, basis, symlink, CI-workflow,
-budget, and compiler-artifact violations fail closed at their owning
-boundaries.
+observed success or `outcomeUnknown`; the consumer cross-compares Echo's
+attempt, request-basis, external-evidence, postcondition, and resulting-basis
+bindings; and path, basis, symlink, CI-workflow, budget, and compiler-artifact
+violations fail closed at their owning boundaries.
 
 No generic process, filesystem, or network capability is introduced.
 
