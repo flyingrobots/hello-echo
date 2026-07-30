@@ -95,5 +95,53 @@ each generic runner invocation; the deterministic rerun is separate evidence.
 This is singleton scheduler integration: one Action in one Tick. It does not
 claim permanent multi-Action Tick composition or introduce external effects.
 
+## Hello Effect workspace observation
+
+The first external-effect proof is separate from the pure Hello Echo runtime.
+Run it with the same compatible producer checkouts:
+
+```sh
+EDICT_REPO=/path/to/edict \
+ECHO_REPO=/path/to/echo \
+./tests/effect-runtime.sh
+```
+
+The build corroborates the Edict source and complete `workspace.snapshot@1`
+lawpack closure byte-for-byte, then uses Edict's public `externalAction` build
+to emit the exact compiler-owned Core and Echo Target IR request artifacts. It
+does not emit an executable-operation package or invoke an effect through the
+compiler/provider seam.
+
+The runtime witness uses Echo's public generic external-action coordinator and
+bounded workspace adapter. It proves:
+
+- request and claim WAL commits occur in separate host processes before the
+  requested file exists;
+- recovery exposes requested and claimed pending states without filesystem
+  authority;
+- only the capability-rooted adapter receives the workspace directory and
+  exact permitted paths;
+- the canonical settlement is committed before its value becomes
+  consumer-visible;
+- an identical settlement retry returns the original admission without another
+  WAL commit, while a kind-only conflict obstructs without mutation;
+- replay accepts no workspace root, retains observed value A after the complete
+  source root is removed, and does not re-enter the adapter;
+- a fresh request on a new worldline observes later value B;
+- `outcomeUnknown` remains distinct from failure;
+- unauthorized, parent-escaped, and symlink paths settle as typed refusals;
+- the exact settlement-size boundary succeeds and one byte less refuses; and
+- a substituted Core artifact is rejected before the first WAL commit.
+
+The fixed suite contains one ordered golden path, one idempotent retry, one
+conflicting retry, one rootless replay, one fresh-world observation, one
+ambiguous outcome, three path refusals, three cases derived from fixed seed
+`70110`, and eight bounded stress worldlines. Reports contain compiler and
+causal identities but no producer-checkout or workspace-root paths.
+
+Edict declares `workspace.snapshot.observe@1`; Echo durably coordinates it; the
+adapter alone reads the workspace. This proof grants Edict no filesystem,
+process, network, or model authority and introduces no application callback.
+
 No artifact in this repository may be replaced by a handwritten Echo package,
 and no native Hello Echo callback may implement application semantics.

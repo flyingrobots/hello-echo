@@ -108,6 +108,15 @@ Start with `ObserveWorkspaceSnapshot` or a smaller
 - replay without rereading the workspace; and
 - unauthorized path obstruction.
 
+The `workspace.snapshot.observe@1` consumer proof now satisfies this phase. The
+exact Edict Core and Target IR artifacts derive the request independently.
+Echo durably records request, claim, and settlement across separate host
+processes. Recovery exposes pending work, exact retry is effect-free,
+conflicting retry obstructs, and replay retains the admitted observation after
+the entire workspace root is removed. A new worldline alone may observe a
+changed workspace. Path aperture, symlink, basis, terminal-size, and compiler
+artifact substitutions all fail closed.
+
 ### Basis-bound write
 
 Add `ApplyValidatedPatch` only after read-only observation is green:
@@ -120,6 +129,10 @@ Add `ApplyValidatedPatch` only after read-only observation is green:
 - replay never reapplies the patch.
 
 No generic process, filesystem, or network capability is introduced.
+
+Roadmap A.1 is four of five phases complete: Echo durable external actions,
+Edict typed external requests, Echo bounded observation, and this external
+consumer proof are complete. Basis-bound validated patch application remains.
 
 ## Roadmap B — Graft hosted by Echo
 
