@@ -45,7 +45,6 @@ make_case() {
   replacement_hex=$5
   permitted_path=$6
   max_settlement_bytes=$7
-  max_file_bytes=$8
   jq -n \
     --argjson worldline_byte "$worldline_byte" \
     --arg path "$path" \
@@ -53,11 +52,9 @@ make_case() {
     --arg replacement_hex "$replacement_hex" \
     --arg permitted_path "$permitted_path" \
     --argjson max_settlement_bytes "$max_settlement_bytes" \
-    --argjson max_file_bytes "$max_file_bytes" \
     '{
       worldlineByte: $worldline_byte,
       intent: "applyValidated",
-      scope: ("patch-scope-" + ($worldline_byte | tostring)),
       proposal: {
         path: $path,
         replacementBytesHex: $replacement_hex
@@ -67,8 +64,7 @@ make_case() {
         bytesHex: $before_hex
       },
       permittedPaths: [$permitted_path],
-      maxSettlementBytes: $max_settlement_bytes,
-      maxFileBytes: $max_file_bytes
+      maxSettlementBytes: $max_settlement_bytes
     }' >"$case_file"
 }
 
@@ -132,8 +128,7 @@ complete_success_case() {
     "$(hex_bytes "$before")" \
     "$(hex_bytes "$replacement")" \
     "$path" \
-    "$max_settlement_bytes" \
-    65536
+    "$max_settlement_bytes"
   run_phase request "$case_file" "$wal_dir" "$case_root/request-report.json"
   run_phase claim "$case_file" "$wal_dir" "$case_root/claim-report.json"
   run_phase apply "$case_file" "$wal_dir" "$case_root/settlement-report.json" "$workspace_root"
@@ -176,7 +171,6 @@ make_case \
   "$(hex_bytes "$golden_before")" \
   "$(hex_bytes "$golden_replacement")" \
   "$golden_path" \
-  65536 \
   65536
 
 run_phase request "$golden_case" "$golden_wal" "$golden_root/request-report.json"
@@ -232,6 +226,39 @@ jq -e '
   and .wal.commitCountAfter == 3
 ' "$golden_root/conflict-report.json" >/dev/null
 
+# The permitted aperture is part of request identity. A caller cannot broaden
+# it after the request and claim are durable.
+aperture_root="$patch_root/aperture-substitution"
+aperture_workspace="$aperture_root/workspace"
+aperture_case="$aperture_root/request.json"
+aperture_tampered="$aperture_root/tampered-request.json"
+mkdir -p "$aperture_workspace"
+printf '%s' secret >"$aperture_workspace/secret.txt"
+make_case \
+  "$aperture_case" \
+  109 \
+  secret.txt \
+  "$(hex_bytes secret)" \
+  "$(hex_bytes replaced)" \
+  allowed.txt \
+  65536
+run_phase request "$aperture_case" "$aperture_root/wal" "$aperture_root/request-report.json"
+run_phase claim "$aperture_case" "$aperture_root/wal" "$aperture_root/claim-report.json"
+jq '.permittedPaths = ["secret.txt"]' "$aperture_case" >"$aperture_tampered"
+if run_phase \
+  apply \
+  "$aperture_tampered" \
+  "$aperture_root/wal" \
+  "$aperture_root/tampered-report.json" \
+  "$aperture_workspace"
+then
+  echo "post-claim patch aperture substitution unexpectedly passed" >&2
+  exit 1
+fi
+run_phase inspect "$aperture_case" "$aperture_root/wal" "$aperture_root/recovery-report.json"
+assert_posture "$aperture_root/recovery-report.json" inspect claimed 2
+test "$(cat "$aperture_workspace/secret.txt")" = secret
+
 # Replay accepts no workspace authority and cannot reapply the settled patch.
 post_settlement='changed after settlement'
 printf '%s' "$post_settlement" >"$golden_workspace/$golden_path"
@@ -258,7 +285,6 @@ make_case \
   "$(hex_bytes before)" \
   "$(hex_bytes after)" \
   "$reconcile_path" \
-  65536 \
   65536
 run_phase request "$reconcile_case" "$reconcile_root/wal" "$reconcile_root/request-report.json"
 run_phase claim "$reconcile_case" "$reconcile_root/wal" "$reconcile_root/claim-report.json"
@@ -291,7 +317,6 @@ make_case \
   "$(hex_bytes before)" \
   "$(hex_bytes intended)" \
   ambiguous.txt \
-  65536 \
   65536
 run_phase request "$unknown_case" "$unknown_root/wal" "$unknown_root/request-report.json"
 run_phase claim "$unknown_case" "$unknown_root/wal" "$unknown_root/claim-report.json"
@@ -347,7 +372,6 @@ assert_rejected_case() {
     "$(hex_bytes "$before")" \
     "$(hex_bytes "$replacement")" \
     "$permitted_path" \
-    65536 \
     65536
   run_phase request "$case_file" "$case_root/wal" "$case_root/request-report.json"
   run_phase claim "$case_file" "$case_root/wal" "$case_root/claim-report.json"
@@ -389,7 +413,6 @@ make_case \
   "$(hex_bytes absent)" \
   "$(hex_bytes replaced)" \
   allowed.txt \
-  65536 \
   65536
 if run_phase \
   request \
@@ -405,6 +428,35 @@ jq -e '
   and .obstruction == "requestRejected"
   and .wal.commitCount == 0
 ' "$parent_root/request-report.json" >/dev/null
+
+# Model output is closed-schema data. Extra authority-shaped fields cannot be
+# smuggled through the proposal and fail before the first WAL commit.
+malformed_root="$patch_root/malformed-proposal"
+mkdir -p "$malformed_root"
+make_case \
+  "$malformed_root/request.json" \
+  110 \
+  source.txt \
+  "$(hex_bytes source)" \
+  "$(hex_bytes target)" \
+  source.txt \
+  65536
+jq '.proposal.command = "git push --force"' \
+  "$malformed_root/request.json" >"$malformed_root/tampered-request.json"
+if run_phase \
+  request \
+  "$malformed_root/tampered-request.json" \
+  "$malformed_root/wal" \
+  "$malformed_root/request-report.json"
+then
+  echo "proposal with an undeclared field unexpectedly passed" >&2
+  exit 1
+fi
+jq -e '
+  .phase == "request"
+  and .obstruction == "requestRejected"
+  and .wal.commitCount == 0
+' "$malformed_root/request-report.json" >/dev/null
 
 # Settlement-size boundary: the exact encoded result size succeeds; one byte
 # less refuses before mutation.
@@ -429,8 +481,7 @@ make_case \
   "$(hex_bytes before)" \
   "$(hex_bytes boundary)" \
   exact.txt \
-  "$((boundary_floor - 1))" \
-  65536
+  "$((boundary_floor - 1))"
 if run_phase \
   request \
   "$under_root/request.json" \
@@ -461,7 +512,6 @@ make_case \
   "$(hex_bytes source)" \
   "$(hex_bytes target)" \
   source.txt \
-  65536 \
   65536
 if env PATCH_CORE_FILE="$mutated_core" ./tests/patch-run.sh \
   request \
@@ -487,7 +537,6 @@ make_case \
   "$(hex_bytes source)" \
   "$(hex_bytes target)" \
   source.txt \
-  65536 \
   65536
 run_phase \
   request \
@@ -528,7 +577,6 @@ do
     "$(hex_bytes before)" \
     "$replacement_hex" \
     value.bin \
-    65536 \
     65536
   run_phase request "$case_root/request.json" "$case_root/wal" "$case_root/request-report.json"
   run_phase claim "$case_root/request.json" "$case_root/wal" "$case_root/claim-report.json"
@@ -568,4 +616,4 @@ then
 fi
 
 printf '%s\n' \
-  "Hello Effect patch suite passed: 1 ordered golden, 1 retry, 1 conflict, 1 replay, 2 reconciliation outcomes, 5 refusals, 1 boundary probe, 2 boundaries, 2 artifact refusals, 3 fixed-seed property, 8 stress"
+  "Hello Effect patch suite passed: 1 ordered golden, 1 retry, 1 conflict, 1 aperture substitution, 1 replay, 2 reconciliation outcomes, 5 refusals, 1 malformed proposal, 1 boundary probe, 2 boundaries, 2 artifact refusals, 3 fixed-seed property, 8 stress"
