@@ -163,8 +163,8 @@ and no native Hello Echo callback may implement application semantics.
 
 ## Hello Effect validated patch application
 
-The second external-effect proof consumes the completed observation boundary
-as basis evidence and applies one compiler-authored validated patch:
+The second external-effect proof accepts bounded observation evidence as basis
+input and applies one compiler-authored validated patch:
 
 ```sh
 EDICT_REPO=/path/to/edict \
@@ -178,13 +178,17 @@ sidecars, Core artifact, and Target IR artifact for
 provider receives no filesystem authority and emits no executable-operation
 package.
 
-The request JSON separates untrusted `proposal` data from the admitted
-`observation` basis. The host uses Echo's generic validated-patch encoder and
-authority functions; it does not reconstruct patch policy or perform native
-application semantics. The proposal and observation are closed schemas, and
-the adapter's 65,536-byte file cap is host-owned rather than caller-selected.
-Echo durably records the request and claim before only the bounded adapter
-receives a workspace root.
+The request JSON separates untrusted `proposal` data from the declared
+`observation` basis. The host owns `permittedPaths` and the adapter's
+65,536-byte file cap; the model controls only the closed `proposal` schema.
+The host uses Echo's generic validated-patch encoder and authority functions;
+it does not reconstruct patch policy or perform native application semantics.
+The observation is also a closed schema. Echo durably records the request and
+claim before only the bounded adapter receives a workspace root.
+
+This witness proves the basis-bound write boundary independently. It does not
+claim that the observation and patch run share one chained transaction or
+worldline.
 
 The runtime witness proves:
 

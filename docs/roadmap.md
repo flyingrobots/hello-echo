@@ -134,16 +134,19 @@ Add `ApplyValidatedPatch` only after read-only observation is green:
 
 The `workspace.patch.applyValidated@1` consumer proof now satisfies this phase.
 Exact Edict Core and Target IR artifacts construct the request without callable
-write effects. Proposal data is deterministically encoded against admitted
-observation evidence and an exact writable aperture. Model-facing fields are a
-closed schema, while the file cap remains host-owned and cannot be substituted
-after claim. Echo records request and claim before only its generic adapter
-receives the workspace root. Settlement precedes publication; exact retry and
-replay are effect-free; ambiguous postconditions reconcile to either the
-observed success or `outcomeUnknown`; the consumer cross-compares Echo's
-attempt, request-basis, external-evidence, postcondition, and resulting-basis
-bindings; and path, basis, symlink, CI-workflow, budget, and compiler-artifact
-violations fail closed at their owning boundaries.
+write effects. Proposal data is deterministically encoded against declared
+bounded-observation input and an exact host-owned writable aperture.
+Model-facing fields are a closed schema, while both the aperture and file cap
+remain host-owned and cannot be substituted after claim. This independently
+proves the basis-bound write boundary; it does not claim one chained
+observation-to-patch transaction or worldline. Echo records request and claim
+before only its generic adapter receives the workspace root. Settlement
+precedes publication; exact retry and replay are effect-free; ambiguous
+postconditions reconcile to either the observed success or `outcomeUnknown`;
+the consumer cross-compares Echo's attempt, request-basis, external-evidence,
+postcondition, and resulting-basis bindings; and path, basis, symlink,
+CI-workflow, budget, and compiler-artifact violations fail closed at their
+owning boundaries.
 
 No generic process, filesystem, or network capability is introduced.
 
