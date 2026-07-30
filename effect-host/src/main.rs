@@ -14,16 +14,16 @@ use warp_core::causal_wal::{
 };
 use warp_core::external_action::{
     claim_external_action, reconcile_external_action_settlement_retry,
-    record_external_action_request, ExternalActionAdapterBindingV1, ExternalActionAdapterIdV1,
-    ExternalActionAdapterRegistryV1, ExternalActionCoordinatorV1,
-    ExternalActionSettlementCandidateV1, ExternalActionSettlementKindV1,
-    ExternalActionTransactionContextV1, RecoveredExternalActionPostureV1,
+    record_external_action_request, ExternalActionAdapterIdV1, ExternalActionAdapterRegistryV1,
+    ExternalActionCoordinatorV1, ExternalActionSettlementCandidateV1,
+    ExternalActionSettlementKindV1, ExternalActionTransactionContextV1,
+    RecoveredExternalActionPostureV1,
 };
 use warp_core::external_action_adapter::{
     admit_edict_external_action_request_v1, bounded_workspace_observation_basis_v1,
     encode_bounded_workspace_observation_input_v1, AdmittedEdictExternalActionRequestV1,
     BoundedWorkspaceObservationAdapterV1, BoundedWorkspaceObservationProfileV1,
-    EdictExternalActionAdmissionErrorV1,
+    BoundedWorkspaceObservationReconcilerV1, EdictExternalActionAdmissionErrorV1,
 };
 use warp_core::{Hash, WorldlineId};
 
@@ -106,7 +106,8 @@ fn run() -> Result<(), String> {
         "request" => request_phase(&invocation, &request_case, &admitted),
         "claim" => claim_phase(&invocation, &request_case, &admitted),
         "inspect" | "replay" => inspect_phase(&invocation, &request_case, &admitted),
-        "settle" | "unknown" => settlement_phase(&invocation, &request_case, &admitted),
+        "settle" => settlement_phase(&invocation, &request_case, &admitted),
+        "unknown" => uncertainty_phase(&invocation, &request_case, &admitted),
         "retry" => retry_phase(&invocation, &request_case, &admitted),
         phase => Err(format!("unsupported phase: {phase}")),
     }
@@ -252,7 +253,9 @@ fn claim_phase(
     let recorded = coordinator
         .recorded_request(request.request_id())
         .map_err(|error| format!("request recovery failed: {error:?}"))?;
-    let binding = adapter_binding(admitted);
+    let reconciler = BoundedWorkspaceObservationReconcilerV1::new(adapter_profile(admitted))
+        .map_err(|error| format!("adapter profile admission failed: {error:?}"))?;
+    let binding = reconciler.adapter_binding();
     let registry = ExternalActionAdapterRegistryV1::new([binding]);
     let authorization = registry
         .authorize(&request, binding.adapter_id)
@@ -320,19 +323,9 @@ fn settlement_phase(
         adapter_profile(admitted),
     )
     .map_err(|error| format!("adapter open failed: {error:?}"))?;
-    let candidate = if invocation.phase == "settle" {
-        adapter
-            .observe(&grant, admitted)
-            .map_err(|error| format!("bounded observation failed: {error:?}"))?
-    } else {
-        adapter
-            .outcome_unknown(
-                &grant,
-                admitted,
-                digest("hello-effect:outcome-unknown-evidence"),
-            )
-            .map_err(|error| format!("unknown outcome construction failed: {error:?}"))?
-    };
+    let candidate = adapter
+        .observe(&grant, admitted)
+        .map_err(|error| format!("bounded observation failed: {error:?}"))?;
     adapter
         .admit_settlement(
             &mut store,
@@ -343,6 +336,40 @@ fn settlement_phase(
             candidate,
         )
         .map_err(|error| format!("settlement admission failed: {error:?}"))?;
+    print_report(
+        &invocation.phase,
+        request_case,
+        admitted,
+        &store,
+        &coordinator,
+    )
+}
+
+fn uncertainty_phase(
+    invocation: &Invocation,
+    request_case: &RequestCase,
+    admitted: &AdmittedEdictExternalActionRequestV1,
+) -> Result<(), String> {
+    if invocation.argument.is_some() {
+        return Err("unknown does not accept external-world authority".to_owned());
+    }
+    let mut store = open_write_store(&invocation.wal_dir)?;
+    let mut coordinator = recover(&store)?;
+    let grant = coordinator
+        .claim_grant(admitted.request().request_id())
+        .map_err(|error| format!("claim recovery failed: {error:?}"))?;
+    let reconciler = BoundedWorkspaceObservationReconcilerV1::new(adapter_profile(admitted))
+        .map_err(|error| format!("reconciler admission failed: {error:?}"))?;
+    reconciler
+        .admit_outcome_unknown(
+            &mut store,
+            &mut coordinator,
+            transaction_context("settlement", admitted),
+            admitted,
+            grant,
+            digest("hello-effect:outcome-unknown-evidence"),
+        )
+        .map_err(|error| format!("unknown outcome admission failed: {error:?}"))?;
     print_report(
         &invocation.phase,
         request_case,
@@ -576,17 +603,6 @@ fn canonical_bytes_field<'a>(value: &'a CanonicalValueV1, field: &str) -> Result
 
 fn adapter_id() -> ExternalActionAdapterIdV1 {
     ExternalActionAdapterIdV1::from_hash(digest("hello-effect:bounded-adapter"))
-}
-
-fn adapter_binding(
-    admitted: &AdmittedEdictExternalActionRequestV1,
-) -> ExternalActionAdapterBindingV1 {
-    let request = admitted.request();
-    ExternalActionAdapterBindingV1 {
-        adapter_id: adapter_id(),
-        operation_id: request.operation_id,
-        authority_scope_digest: request.authority_scope_digest,
-    }
 }
 
 fn adapter_profile(
