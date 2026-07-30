@@ -251,16 +251,20 @@ make_case \
 run_phase request "$aperture_case" "$aperture_root/wal" "$aperture_root/request-report.json"
 run_phase claim "$aperture_case" "$aperture_root/wal" "$aperture_root/claim-report.json"
 jq '.permittedPaths = ["secret.txt"]' "$aperture_case" >"$aperture_tampered"
-if run_phase \
+if ./tests/patch-run.sh \
   apply \
   "$aperture_tampered" \
   "$aperture_root/wal" \
-  "$aperture_root/tampered-report.json" \
-  "$aperture_workspace"
+  "$aperture_workspace" \
+  >"$aperture_root/tampered-report.json" \
+  2>"$aperture_root/tampered-error.txt"
 then
   echo "post-claim patch aperture substitution unexpectedly passed" >&2
   exit 1
 fi
+test ! -s "$aperture_root/tampered-report.json"
+test "$(cat "$aperture_root/tampered-error.txt")" = \
+  "claim recovery failed: MissingRequest"
 run_phase inspect "$aperture_case" "$aperture_root/wal" "$aperture_root/recovery-report.json"
 assert_posture "$aperture_root/recovery-report.json" inspect claimed 2
 test "$(cat "$aperture_workspace/secret.txt")" = secret
@@ -412,6 +416,8 @@ assert_rejected_case ci-workflow 88 .github/workflows/ci.yml allowed.txt before 
 
 test "$(cat "$patch_root/stale-basis/workspace/stale.txt")" = changed
 test "$(cat "$patch_root/unauthorized/workspace/secret.txt")" = secret
+test "$(cat "$patch_root/symlink/outside.txt")" = outside
+test -L "$patch_root/symlink/workspace/link.txt"
 test "$(cat "$patch_root/ci-workflow/workspace/.github/workflows/ci.yml")" = before
 
 # Parent escape is rejected while deterministically validating proposal data,
@@ -470,13 +476,20 @@ jq -e '
   and .wal.commitCount == 0
 ' "$malformed_root/request-report.json" >/dev/null
 
-# Settlement-size boundary: the exact encoded result size succeeds; one byte
-# less refuses before mutation.
+# Settlement-size boundary: the request-only settlement floor (the encoded
+# result size, never below the host minimum) succeeds; one byte less refuses
+# before mutation.
 complete_success_case boundary-probe 89 before boundary exact.txt 65536
 boundary_result_bytes=$(
   jq -r '.settlement.canonicalResultByteCount' \
     "$patch_root/boundary-probe/settlement-report.json"
 )
+case "$boundary_result_bytes" in
+  '' | *[!0-9]*)
+    echo "settlement report omitted numeric canonicalResultByteCount" >&2
+    exit 1
+    ;;
+esac
 boundary_floor=$boundary_result_bytes
 if test "$boundary_floor" -lt 1024; then
   boundary_floor=1024
@@ -515,6 +528,10 @@ test "$(cat "$under_root/workspace/exact.txt")" = before
 mutated_core="$patch_root/mutated-core.cbor"
 cp "$core_file" "$mutated_core"
 printf '\000' | dd of="$mutated_core" bs=1 seek=0 conv=notrunc 2>/dev/null
+if cmp -s "$core_file" "$mutated_core"; then
+  echo "compiler-artifact substitution fixture did not alter the artifact" >&2
+  exit 1
+fi
 mutated_root="$patch_root/mutated-artifact"
 mkdir -p "$mutated_root"
 make_case \
@@ -616,13 +633,25 @@ while test "$stress_ordinal" -le "$stress_count"; do
   stress_ordinal=$((stress_ordinal + 1))
 done
 
-# Retained evidence must not disclose producer checkout paths.
-if grep -R -F \
-  -e "$(CDPATH='' cd -- "$EDICT_REPO" && pwd -P)" \
-  -e "$(CDPATH='' cd -- "$ECHO_REPO" && pwd -P)" \
-  "$patch_root"/*/*.json \
+# Retained evidence must not disclose host checkout paths.
+edict_repo_root=$(CDPATH='' cd -- "$EDICT_REPO" && pwd -P)
+echo_repo_root=$(CDPATH='' cd -- "$ECHO_REPO" && pwd -P)
+project_root=$(pwd -P)
+set +e
+grep -R -F \
+  -e "$edict_repo_root" \
+  -e "$echo_repo_root" \
+  -e "$project_root" \
+  --include='*.json' \
+  "$patch_root" \
   >/dev/null
-then
+leak_status=$?
+set -e
+if test "$leak_status" -gt 1; then
+  echo "Hello Effect patch witness leak check failed to run" >&2
+  exit 1
+fi
+if test "$leak_status" -eq 0; then
   echo "Hello Effect patch witness disclosed a producer checkout path" >&2
   exit 1
 fi

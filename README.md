@@ -212,7 +212,7 @@ The runtime witness proves:
   policy failures obstruct before mutation;
 - the exact request-only settlement floor passes and one byte less refuses
   before a WAL commit;
-- compiler-artifact substitution fails at request and recovery boundaries
+- compiler-artifact substitution fails at request and claim boundaries
   without hidden WAL growth; and
 - fixed-seed text, Unicode, and binary replacements plus eight bounded stress
   worldlines pass.
