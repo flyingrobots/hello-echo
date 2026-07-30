@@ -117,7 +117,9 @@ the entire workspace root is removed. A new worldline alone may observe a
 changed workspace. Explicit uncertainty settles without reopening the removed
 root. Post-claim aperture substitution cannot recover the durable claim, while
 path, symlink, basis, terminal-size, compiler-artifact, and runtime-request
-violations all fail closed at their owning boundary.
+violations all fail closed at their owning boundary. Compiler artifacts are
+re-admitted at every phase, so a post-request substitution returns a typed
+obstruction without appending to the existing WAL.
 
 ### Basis-bound write
 

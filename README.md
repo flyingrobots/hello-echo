@@ -112,6 +112,11 @@ to emit the exact compiler-owned Core and Echo Target IR request artifacts. It
 does not emit an executable-operation package or invoke an effect through the
 compiler/provider seam.
 
+The public shell boundary canonicalizes producer checkout paths before
+serializing them into the generated Cargo manifest. Relative compiler-artifact
+overrides are resolved from the application root, independent of the caller's
+working directory.
+
 The runtime witness uses Echo's public generic external-action coordinator and
 bounded workspace adapter. It proves:
 
@@ -135,16 +140,19 @@ bounded workspace adapter. It proves:
 - unauthorized, parent-escaped, symlink, and stale-basis paths settle as typed
   refusals;
 - the exact settlement-size boundary succeeds and one byte less refuses; and
-- substituted compiler artifacts and invalid runtime requests are distinguished
-  and rejected before the first WAL commit.
+- substituted compiler artifacts are rejected with the same typed obstruction
+  at request and recovery boundaries without appending to the WAL, while
+  invalid runtime requests remain a distinct pre-commit refusal.
 
-The fixed suite contains one ordered golden path, one idempotent retry, one
-conflicting retry, one aperture substitution, one rootless replay, one
-fresh-world observation, one rootless ambiguous outcome, four path-or-basis
-refusals, one boundary probe, two boundary cases, one compiler-artifact
-refusal, one runtime-request refusal, three cases derived from fixed seed
-`70110`, and eight bounded stress worldlines. Reports contain compiler and
-causal identities but no producer-checkout or workspace-root paths.
+The fixed suite contains one ordered golden path, one relative
+compiler-artifact path probe, one idempotent retry, one conflicting retry, one
+aperture substitution, one rootless replay, one fresh-world observation, one
+rootless ambiguous outcome, four path-or-basis refusals, one boundary probe,
+two boundary cases, two compiler-artifact refusals, one runtime-request
+refusal, three cases derived from fixed seed `70110`, and eight bounded stress
+worldlines. Every retained JSON artifact is checked for producer-checkout path
+leaks. Reports contain compiler and causal identities but no producer-checkout
+or workspace-root paths.
 
 Edict declares `workspace.snapshot.observe@1`; Echo durably coordinates it; the
 adapter alone reads the workspace. This proof grants Edict no filesystem,
