@@ -21,6 +21,18 @@ effect_root=.build/effect-tests
 rm -rf "$effect_root"
 mkdir -p "$effect_root"
 
+# Producer checkout paths may be relative at the public shell boundary. The
+# generated Cargo manifest must contain their canonical targets, not paths that
+# Cargo would reinterpret relative to the nested build directory.
+relative_repo_links="$effect_root/relative-repos"
+mkdir -p "$relative_repo_links"
+ln -s "$EDICT_REPO" "$relative_repo_links/edict"
+ln -s "$ECHO_REPO" "$relative_repo_links/echo"
+EDICT_REPO="$relative_repo_links/edict" \
+ECHO_REPO="$relative_repo_links/echo" \
+./tests/effect-build.sh
+rm -rf "$relative_repo_links"
+
 core_file=.build/effect/application/core.cbor
 target_ir_file=.build/effect/application/target-ir.cbor
 expected_core="$EDICT_REPO/fixtures/lawpack/workspace-snapshot/observe-workspace.core.cbor"
@@ -233,6 +245,50 @@ jq -e '
   and .wal.commitCountAfter == 3
 ' "$golden_root/conflict-report.json" >/dev/null
 
+# The runtime-owned permitted aperture is bound into the durable request. A
+# caller cannot broaden it between claim recovery and adapter construction.
+aperture_root="$effect_root/aperture-substitution"
+aperture_case="$aperture_root/request.json"
+aperture_tampered="$aperture_root/tampered-request.json"
+aperture_path=secret.txt
+mkdir -p "$aperture_root/workspace"
+printf '%s' 'secret' >"$aperture_root/workspace/$aperture_path"
+make_case \
+  "$aperture_case" \
+  71 \
+  "$aperture_path" \
+  "$(hex_bytes 'secret')" \
+  65536 \
+  allowed.txt
+run_phase \
+  request \
+  "$aperture_case" \
+  "$aperture_root/wal" \
+  "$aperture_root/request-report.json"
+run_phase \
+  claim \
+  "$aperture_case" \
+  "$aperture_root/wal" \
+  "$aperture_root/claim-report.json"
+jq --arg path "$aperture_path" '.permittedPaths = [$path]' \
+  "$aperture_case" >"$aperture_tampered"
+if run_phase \
+  settle \
+  "$aperture_tampered" \
+  "$aperture_root/wal" \
+  "$aperture_root/tampered-report.json" \
+  "$aperture_root/workspace"
+then
+  echo "post-claim aperture substitution unexpectedly passed" >&2
+  exit 1
+fi
+run_phase \
+  inspect \
+  "$aperture_case" \
+  "$aperture_root/wal" \
+  "$aperture_root/recovery-report.json"
+assert_posture "$aperture_root/recovery-report.json" inspect claimed 2
+
 # Replay accepts no workspace-root argument. Removing the complete root makes
 # accidental adapter re-entry impossible while the retained value remains A.
 mv "$golden_workspace" "$golden_root/world-after-settlement"
@@ -269,12 +325,12 @@ make_case \
   ambiguous.txt
 run_phase request "$unknown_case" "$unknown_root/wal" "$unknown_root/request-report.json"
 run_phase claim "$unknown_case" "$unknown_root/wal" "$unknown_root/claim-report.json"
+rm -rf "$unknown_root/workspace"
 run_phase \
   unknown \
   "$unknown_case" \
   "$unknown_root/wal" \
-  "$unknown_root/unknown-report.json" \
-  "$unknown_root/workspace"
+  "$unknown_root/unknown-report.json"
 assert_posture "$unknown_root/unknown-report.json" unknown settled 3
 jq -e '
   .settlement.kind == "outcomeUnknown"
@@ -407,6 +463,32 @@ jq -e '
   and .wal.commitCount == 0
 ' "$mutated_root/report.json" >/dev/null
 
+# Invalid runtime request data is not misreported as a compiler artifact
+# substitution and also fails before the first WAL commit.
+invalid_request_root="$effect_root/invalid-request"
+mkdir -p "$invalid_request_root"
+make_case \
+  "$invalid_request_root/request.json" \
+  72 \
+  source.txt \
+  "$(hex_bytes 'source')" \
+  1 \
+  source.txt
+if run_phase \
+  request \
+  "$invalid_request_root/request.json" \
+  "$invalid_request_root/wal" \
+  "$invalid_request_root/report.json"
+then
+  echo "invalid runtime request unexpectedly passed" >&2
+  exit 1
+fi
+jq -e '
+  .phase == "request"
+  and .obstruction == "requestRejected"
+  and .wal.commitCount == 0
+' "$invalid_request_root/report.json" >/dev/null
+
 # Fixed-seed property corpus.
 property_seed=70110
 property_ordinal=0
@@ -449,4 +531,4 @@ then
 fi
 
 printf '%s\n' \
-  "Hello Effect suite passed: 1 ordered golden, 1 retry, 1 conflict, 1 replay, 1 fresh world, 1 unknown, 4 refusals, 1 boundary probe, 2 boundaries, 1 artifact refusal, 3 fixed-seed property, 8 stress"
+  "Hello Effect suite passed: 1 ordered golden, 1 retry, 1 conflict, 1 aperture substitution, 1 replay, 1 fresh world, 1 rootless unknown, 4 refusals, 1 boundary probe, 2 boundaries, 1 artifact refusal, 1 request refusal, 3 fixed-seed property, 8 stress"
