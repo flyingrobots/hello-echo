@@ -304,6 +304,9 @@ assert_rejected_case() {
     regular)
       printf '%s' 'secret' >"$workspace_root/$requested_path"
       ;;
+    stale)
+      printf '%s' 'changed after request' >"$workspace_root/$requested_path"
+      ;;
     absent) ;;
     *)
       echo "unknown rejected-case setup: $setup_kind" >&2
@@ -340,6 +343,7 @@ assert_rejected_case() {
 assert_rejected_case unauthorized 44 secret.txt allowed.txt unauthorized-path regular
 assert_rejected_case parent-escape 45 ../secret.txt allowed.txt invalid-path absent
 assert_rejected_case symlink 46 link.txt link.txt symlink-refused symlink
+assert_rejected_case stale-basis 70 stale.txt stale.txt stale-basis stale
 
 # Boundary: first observe the exact encoding size for this path and value, then
 # prove that exact bound passes while one byte less produces a typed rejection.
@@ -445,4 +449,4 @@ then
 fi
 
 printf '%s\n' \
-  "Hello Effect suite passed: 1 ordered golden, 1 retry, 1 conflict, 1 replay, 1 fresh world, 1 unknown, 3 refusals, 1 boundary probe, 2 boundaries, 1 artifact refusal, 3 fixed-seed property, 8 stress"
+  "Hello Effect suite passed: 1 ordered golden, 1 retry, 1 conflict, 1 replay, 1 fresh world, 1 unknown, 4 refusals, 1 boundary probe, 2 boundaries, 1 artifact refusal, 3 fixed-seed property, 8 stress"
