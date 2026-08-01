@@ -39,8 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Build refusal for cross-wired, unresolved, or sentinel external-action schema
   identities in the vendored compiler source, enforced by a single shared guard
   that binds each schema slot to the vendored artifact it names.
-- Hermetic `tests/resource-identity-guard.sh` covering that guard against
-  crafted closures, requiring no producer checkout and no `cargo`.
+- Hermetic `tests/resource-identity-guard.sh` and
+  `tests/writer-epoch-assertions.sh` covering the build guard and the shared
+  writer-epoch assertions against crafted closures and mutated reports. Both
+  require no producer checkout and no `cargo`.
 
 ### Changed
 
