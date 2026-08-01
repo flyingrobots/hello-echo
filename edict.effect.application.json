@@ -13,6 +13,17 @@
       "targetConfiguration": "effect/vendor/workspace-snapshot/request-profile-configuration.cbor"
     }
   ],
+  "externalActionResources": [
+    {
+      "artifact": "effect/vendor/workspace-snapshot/input-schema.cbor"
+    },
+    {
+      "artifact": "effect/vendor/workspace-snapshot/settlement-schema.cbor"
+    },
+    {
+      "artifact": "effect/vendor/workspace-snapshot/reconciliation-law.cbor"
+    }
+  ],
   "target": {
     "profile": "echo.dpo@1",
     "providerPackage": ".build/effect/echo-provider"
