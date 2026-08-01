@@ -13,8 +13,16 @@
 # across host restarts.
 assert_first_writer_epoch() {
   report_file=$1
+  # jq reads a missing property as null, so every field the assertion relies on
+  # must be required to exist. Otherwise a host that stopped emitting the
+  # predecessor fields would satisfy the null comparisons below.
   jq -e '
-    (.writerEpoch.epochId | test("^[0-9a-f]{64}$"))
+    has("writerEpoch")
+    and (.writerEpoch | has("epochId"))
+    and (.writerEpoch | has("previousEpochId"))
+    and (.writerEpoch | has("previousEpochFinalCommitDigest"))
+    and (.writerEpoch | has("startedAtLsn"))
+    and (.writerEpoch.epochId | test("^[0-9a-f]{64}$"))
     and .writerEpoch.previousEpochId == null
     and .writerEpoch.previousEpochFinalCommitDigest == null
     and (.writerEpoch.startedAtLsn | type) == "number"
@@ -30,7 +38,14 @@ assert_chained_writer_epoch() {
   jq -e \
     --slurpfile previous "$previous_report" \
     '
-      (.writerEpoch.epochId | test("^[0-9a-f]{64}$"))
+      has("writerEpoch")
+      and (.writerEpoch | has("epochId"))
+      and (.writerEpoch | has("previousEpochId"))
+      and (.writerEpoch | has("previousEpochFinalCommitDigest"))
+      and (.writerEpoch | has("startedAtLsn"))
+      and ($previous[0] | has("wal"))
+      and ($previous[0].wal | has("lastCommitDigest"))
+      and (.writerEpoch.epochId | test("^[0-9a-f]{64}$"))
       and (.writerEpoch.previousEpochFinalCommitDigest | test("^[0-9a-f]{64}$"))
       and .writerEpoch.epochId != $previous[0].writerEpoch.epochId
       and .writerEpoch.previousEpochId == $previous[0].writerEpoch.epochId

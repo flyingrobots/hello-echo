@@ -122,6 +122,32 @@ if assert_no_writer_epoch "$work/claim.json" 2>/dev/null; then
 fi
 printf 'ok   rejected: read-only check against a populated epoch\n'
 
+# jq reads a missing property as null, so a first-epoch report that simply
+# stops emitting the predecessor fields would satisfy an assertion written only
+# as "== null". Absence of evidence must not read as evidence of absence.
+for missing in previousEpochId previousEpochFinalCommitDigest startedAtLsn epochId
+do
+  jq "del(.writerEpoch.$missing)" "$work/request.json" >"$work/first-missing.json"
+  if assert_first_writer_epoch "$work/first-missing.json" 2>/dev/null; then
+    printf 'FAIL assertion accepted: first epoch missing %s\n' "$missing" >&2
+    exit 1
+  fi
+  printf 'ok   rejected: first epoch missing %s\n' "$missing"
+done
+
+# The same for the chained assertion.
+for missing in previousEpochId previousEpochFinalCommitDigest startedAtLsn epochId
+do
+  jq "del(.writerEpoch.$missing)" "$work/claim.json" >"$work/chain-missing.json"
+  if assert_chained_writer_epoch "$work/chain-missing.json" "$work/request.json" \
+    2>/dev/null
+  then
+    printf 'FAIL assertion accepted: chained epoch missing %s\n' "$missing" >&2
+    exit 1
+  fi
+  printf 'ok   rejected: chained epoch missing %s\n' "$missing"
+done
+
 # The first-epoch assertion must not accept an epoch that already has a
 # predecessor, which would hide a WAL that was not actually fresh.
 if assert_first_writer_epoch "$work/claim.json" 2>/dev/null; then
