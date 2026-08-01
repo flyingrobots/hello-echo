@@ -234,4 +234,31 @@ printf '%s\n' "$good_reconcile" >"$work/emptysidecar/reconciliation-law.sha256"
 write_source "$work/emptysidecar.edict" "$good_input" "$good_settlement" "$good_reconcile"
 expect_reject "$work/emptysidecar" "$work/emptysidecar.edict" "empty identity sidecar"
 
+# A NUL byte is not a line terminator. The shell drops it from the value read,
+# so a byte count alone reads the file as identity-plus-terminator.
+mkdir -p "$work/nul"
+printf '%s\0' "$good_input" >"$work/nul/input-schema.sha256"
+printf '%s\n' "$good_settlement" >"$work/nul/settlement-schema.sha256"
+printf '%s\n' "$good_reconcile" >"$work/nul/reconciliation-law.sha256"
+write_source "$work/nul.edict" "$good_input" "$good_settlement" "$good_reconcile"
+expect_reject "$work/nul" "$work/nul.edict" "sidecar terminated by a NUL byte"
+
+# A slot with no digest whose successor declares one inline must not adopt it.
+# Sharing an identity between two resources makes the substitution invisible to
+# a comparison that only checks the value it found.
+mkdir -p "$work/adopt"
+printf '%s\n' "$good_input" >"$work/adopt/input-schema.sha256"
+printf '%s\n' "$good_input" >"$work/adopt/settlement-schema.sha256"
+printf '%s\n' "$good_reconcile" >"$work/adopt/reconciliation-law.sha256"
+cat >"$work/adopt.edict" <<EOF
+intent applyValidated(input: ApplyPatchInput)
+{
+    input schema workspace.patch.input@1
+    settlement schema workspace.patch.settlement@1 digest "$good_input"
+    reconcile workspace.patch.reconcile@1
+      digest "$good_reconcile";
+}
+EOF
+expect_reject "$work/adopt" "$work/adopt.edict" "slot adopting its successor's inline digest"
+
 echo "resource identity guard: all cases passed"

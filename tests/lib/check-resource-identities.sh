@@ -56,17 +56,21 @@ declared_identity() {
       next
     }
     seen {
-      # Another coordinate, or the terminator, ends this declaration.
-      if ($0 ~ /@[0-9]+/ || index($0, ";") > 0) {
-        found = digest_in($0)
-        if (found != "") {
-          print found
-        }
+      # A new coordinate ends this declaration immediately. Extracting a digest
+      # here would let a slot that declares none adopt the inline digest of the
+      # slot that follows it, which is invisible when two resources share an
+      # identity. An apostrophe cannot appear in this comment: the awk program
+      # is single-quoted by the enclosing shell.
+      if ($0 ~ /@[0-9]+/) {
         exit
       }
       found = digest_in($0)
       if (found != "") {
         print found
+        exit
+      }
+      # The semicolon closes the declaration without a digest having appeared.
+      if (index($0, ";") > 0) {
         exit
       }
     }
@@ -100,6 +104,16 @@ do
   if test "$sidecar_bytes" -gt "$((${#identity} + 1))"; then
     echo "resource $resource has trailing content after its identity" >&2
     exit 1
+  fi
+  # A count alone does not say which byte the extra one is. The shell drops a
+  # NUL from the value it reads, so an identity followed by NUL also measures
+  # as identity-plus-one. Require that byte to be the line terminator.
+  if test "$sidecar_bytes" -eq "$((${#identity} + 1))"; then
+    terminator=$(tail -c 1 "$sidecar" | od -An -tu1 | tr -d ' \n')
+    if test "$terminator" != 10; then
+      echo "resource $resource is not terminated by a newline" >&2
+      exit 1
+    fi
   fi
 
   # Only a lowercase 64-character hexadecimal body can name a SHA-256 artifact.
