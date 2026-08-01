@@ -242,8 +242,10 @@ The runtime witness proves:
 - the exact request-only settlement floor passes and one byte less refuses
   before a WAL commit;
 - a replacement too large for the compiler-declared request carrier refuses as
-  `replacementExceedsRequestBudget` before a WAL commit, distinct from a
-  malformed request;
+  `replacementExceedsRequestBudget` before a WAL commit, and a declared
+  pre-state above the host file budget refuses as
+  `observationExceedsFileBudget`, both distinct from a malformed request and
+  from each other;
 - compiler-artifact substitution fails at request and claim boundaries
   without hidden WAL growth;
 - every write phase runs under a fresh Echo-derived writer epoch chained to the

@@ -589,6 +589,38 @@ jq -e '
 # A refusal must leave the workspace alone, not merely skip the WAL commit.
 test "$(cat "$oversize_root/workspace/notes/big.txt")" = hello
 
+# An oversized observation is a different fault from an oversized replacement.
+# Reporting both as a replacement-budget refusal would name the wrong input.
+oversize_before_root="$patch_root/oversize-observation"
+mkdir -p "$oversize_before_root/workspace/notes"
+printf 'hello' >"$oversize_before_root/workspace/notes/before.txt"
+oversize_before_hex=$(
+  awk 'BEGIN { while (i++ < 65537) printf "42" }'
+)
+make_case \
+  "$oversize_before_root/request.json" \
+  94 \
+  notes/before.txt \
+  "$oversize_before_hex" \
+  "$(hex_bytes small)" \
+  notes/before.txt \
+  65536
+if run_phase \
+  request \
+  "$oversize_before_root/request.json" \
+  "$oversize_before_root/wal" \
+  "$oversize_before_root/report.json"
+then
+  echo "an observation above the file budget was admitted" >&2
+  exit 1
+fi
+jq -e '
+  .phase == "request"
+  and .obstruction == "observationExceedsFileBudget"
+  and .wal.commitCount == 0
+' "$oversize_before_root/report.json" >/dev/null
+test "$(cat "$oversize_before_root/workspace/notes/before.txt")" = hello
+
 # Settlement-size boundary: the request-only settlement floor (the encoded
 # result size, never below the host minimum) succeeds; one byte less refuses
 # before mutation.

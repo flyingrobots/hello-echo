@@ -102,6 +102,9 @@ fn run() -> Result<(), String> {
         Err(refusal) => {
             let obstruction = match refusal {
                 ApplicationInputRefusal::Malformed => "requestRejected",
+                ApplicationInputRefusal::ObservationExceedsFileBudget => {
+                    "observationExceedsFileBudget"
+                }
                 ApplicationInputRefusal::ReplacementExceedsRequestBudget => {
                     "replacementExceedsRequestBudget"
                 }
@@ -180,12 +183,17 @@ fn parse_invocation() -> Result<Invocation, String> {
 
 /// Why a request could not be turned into an application input.
 ///
-/// An over-budget replacement is kept distinct from a malformed one: the host
-/// accepts replacement sizes the encoded request cannot carry, and reporting
-/// both as the same obstruction would make a budget refusal indistinguishable
-/// from a bad request.
+/// Budget refusals are kept distinct from malformed ones, and from each other:
+/// the host accepts replacement sizes the encoded request cannot carry, and
+/// the observation and the replacement are separate inputs. Reporting them
+/// under one obstruction would make a budget refusal indistinguishable from a
+/// bad request, or name the wrong input.
 enum ApplicationInputRefusal {
     Malformed,
+    /// The declared pre-state does not fit the host file budget.
+    ObservationExceedsFileBudget,
+    /// The proposal was well formed, but its encoded patch does not fit the
+    /// compiler-declared request carrier.
     ReplacementExceedsRequestBudget,
 }
 
@@ -199,7 +207,13 @@ fn application_input(request_case: &RequestCase) -> Result<Vec<u8>, ApplicationI
         .map_err(|_| ApplicationInputRefusal::Malformed)?;
     let max_file_bytes =
         usize::try_from(MAX_FILE_BYTES_V1).map_err(|_| ApplicationInputRefusal::Malformed)?;
-    if before.len() > max_file_bytes || replacement.len() > max_file_bytes {
+    // The observation and the replacement are separate inputs with separate
+    // faults. Collapsing them would report an oversized pre-state as a
+    // replacement-budget refusal and name the wrong input.
+    if before.len() > max_file_bytes {
+        return Err(ApplicationInputRefusal::ObservationExceedsFileBudget);
+    }
+    if replacement.len() > max_file_bytes {
         return Err(ApplicationInputRefusal::ReplacementExceedsRequestBudget);
     }
     let patch = encode_validated_workspace_patch_input_v1(

@@ -51,8 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   writer-epoch assertions against crafted closures and mutated reports. Both
   require no producer checkout and no `cargo`.
 
-- `replacementExceedsRequestBudget` as a distinct request obstruction, with a
-  witness case covering a replacement above the encodable ceiling.
+- `replacementExceedsRequestBudget` and `observationExceedsFileBudget` as
+  distinct request obstructions, with witness cases covering a replacement
+  above the encodable ceiling and a declared pre-state above the file budget.
 
 ### Changed
 
