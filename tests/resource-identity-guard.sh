@@ -168,4 +168,23 @@ intent applyValidated(input: ApplyPatchInput)
 EOF
 expect_reject "$work/good" "$work/missing.edict" "input slot declares no digest"
 
+# A sidecar carrying whitespace inside the identity is not a canonical
+# identity. Normalizing it away before validation would accept malformed
+# generator output whenever the source happens to carry the compacted value.
+mkdir -p "$work/spaced"
+printf 'sha256:1111111111111111111111111111111111111111 111111111111111111111112\n' \
+  >"$work/spaced/input-schema.sha256"
+printf '%s\n' "$good_settlement" >"$work/spaced/settlement-schema.sha256"
+printf '%s\n' "$good_reconcile" >"$work/spaced/reconciliation-law.sha256"
+write_source "$work/spaced.edict" "$good_input" "$good_settlement" "$good_reconcile"
+expect_reject "$work/spaced" "$work/spaced.edict" "whitespace inside the sidecar identity"
+
+# A trailing newline is the one permitted terminator and must still be accepted.
+mkdir -p "$work/nonewline"
+printf '%s' "$good_input" >"$work/nonewline/input-schema.sha256"
+printf '%s\n' "$good_settlement" >"$work/nonewline/settlement-schema.sha256"
+printf '%s\n' "$good_reconcile" >"$work/nonewline/reconciliation-law.sha256"
+write_source "$work/nonewline.edict" "$good_input" "$good_settlement" "$good_reconcile"
+expect_accept "$work/nonewline" "$work/nonewline.edict" "sidecar without a trailing newline"
+
 echo "resource identity guard: all cases passed"

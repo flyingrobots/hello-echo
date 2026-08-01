@@ -84,7 +84,18 @@ do
     echo "resource $resource has no vendored identity sidecar" >&2
     exit 1
   fi
-  identity=$(tr -d '[:space:]' <"$sidecar")
+  # Read the sidecar as one line, stripping only the trailing line terminator.
+  # Deleting all whitespace would silently compact a malformed identity such as
+  # "sha256:ab cd..." into a well-formed one and accept it.
+  # read returns non-zero on a final line with no terminator, which set -e
+  # would treat as a failure, so its status is discarded and the value printed
+  # unconditionally.
+  identity=$(IFS= read -r line <"$sidecar" || true; printf '%s' "$line")
+  # A sidecar carrying more than one line is not a canonical identity either.
+  if test "$(wc -l <"$sidecar" | tr -d ' ')" -gt 1; then
+    echo "resource $resource has a multi-line identity sidecar" >&2
+    exit 1
+  fi
 
   # Only a lowercase 64-character hexadecimal body can name a SHA-256 artifact.
   # A character-blind length check would accept sha256:gggg... as an identity.
