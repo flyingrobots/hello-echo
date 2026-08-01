@@ -35,7 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Writer-epoch chain evidence in the observation and patch reports, with
   witness cases requiring a fresh epoch per write phase, exact predecessor and
   final-commit-digest linkage, a strictly advancing start LSN, no epoch on
-  read-only phases, and no epoch reused across the ordered golden path.
+  read-only phases, and no epoch reused across the ordered golden path. The
+  predecessor linkage is compared against the commit digest the predecessor
+  reported, not merely checked for shape.
+- `wal.lastCommitDigest` in both reports, so a successor epoch's declared
+  predecessor commit can be compared with the commit that actually closed it.
 - Build refusal for cross-wired, unresolved, or sentinel external-action schema
   identities in the vendored compiler source, enforced by a single shared guard
   that binds each schema slot to the vendored artifact it names.

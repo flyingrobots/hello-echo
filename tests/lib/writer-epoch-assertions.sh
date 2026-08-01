@@ -33,6 +33,8 @@ assert_chained_writer_epoch() {
       and (.writerEpoch.previousEpochFinalCommitDigest | test("^[0-9a-f]{64}$"))
       and .writerEpoch.epochId != $previous[0].writerEpoch.epochId
       and .writerEpoch.previousEpochId == $previous[0].writerEpoch.epochId
+      and .writerEpoch.previousEpochFinalCommitDigest
+          == $previous[0].wal.lastCommitDigest
       and .writerEpoch.startedAtLsn > $previous[0].writerEpoch.startedAtLsn
     ' \
     "$report_file" >/dev/null

@@ -20,13 +20,16 @@ trap 'rm -rf "$work"' EXIT
 first=57645ea6d8294d4177531f813035c926d051bae68c0ce6d0a74afc08bf612d55
 second=a3b974bd428109b96ea26087630b9562c51a08f7ac498d93bb04c253ee6bb85a
 commit=3aa349ca0d266dc02cc80fc40fd68e3082fe278bdd5afc6b38f633a05b383e09
+other=8bd0f1c2e4a6957038d1b5c7e9f2a4b6c8d0e2f4a6b8c0d2e4f60718293a4b5c
 
 cat >"$work/request.json" <<EOF
-{"phase":"request","writerEpoch":{"epochId":"$first","previousEpochId":null,
+{"phase":"request","wal":{"commitCount":1,"lastCommitDigest":"$commit"},
+ "writerEpoch":{"epochId":"$first","previousEpochId":null,
  "previousEpochFinalCommitDigest":null,"startedAtLsn":0}}
 EOF
 cat >"$work/claim.json" <<EOF
-{"phase":"claim","writerEpoch":{"epochId":"$second","previousEpochId":"$first",
+{"phase":"claim","wal":{"commitCount":2,"lastCommitDigest":"$other"},
+ "writerEpoch":{"epochId":"$second","previousEpochId":"$first",
  "previousEpochFinalCommitDigest":"$commit","startedAtLsn":1}}
 EOF
 cat >"$work/inspect.json" <<'EOF'
@@ -81,6 +84,12 @@ mutate "start LSN moves backwards" \
 # A write phase that reports no epoch at all must not read as chained.
 mutate "write phase reports no epoch" \
   '.writerEpoch = null'
+
+# A well-formed digest that is not the predecessor's actual final commit. The
+# shape check alone accepts this, so only comparing the value catches a
+# producer that links the right epoch id to the wrong commit.
+mutate "predecessor final commit digest is well-formed but wrong" \
+  '.writerEpoch.previousEpochFinalCommitDigest = "'"$other"'"'
 
 # A malformed identity is not an epoch.
 mutate "epoch id is not a digest" \

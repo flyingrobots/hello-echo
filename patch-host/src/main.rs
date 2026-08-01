@@ -586,7 +586,17 @@ fn report(
             "intent": request_case.intent
         },
         "posture": posture,
-        "wal": {"commitCount": commits.len()},
+        "wal": {
+            "commitCount": commits.len(),
+            // The digest closing this epoch's last commit. A successor's
+            // previousEpochFinalCommitDigest must equal the value the
+            // predecessor reported here, which is what makes the chain
+            // evidence exact rather than merely well-formed.
+            "lastCommitDigest": commits
+                .last()
+                .map(|commit| json!(hex(&commit.commit_digest)))
+                .unwrap_or(Value::Null)
+        },
         "ordering": {
             "requestCommit": request_commit,
             "claimCommit": claim_commit,
