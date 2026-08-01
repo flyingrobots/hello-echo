@@ -189,6 +189,12 @@ complete_success_case() {
 # whose declared observation is those bytes reports a request basis over them.
 # Comparing a retained basis against this is a two-route derivation, not a
 # self-agreement.
+#
+# The fourth argument is the worldline of the case this probe will be compared
+# against, and it must match. A probe on a different worldline cannot isolate
+# the byte input: a producer deriving a basis from request context would
+# satisfy the comparison while ignoring the bytes entirely. Every comparison
+# below therefore varies only the path and the bytes.
 request_basis_for() {
   probe_root="$patch_root/basis-probe-$1"
   probe_path=$2
@@ -449,10 +455,10 @@ assert_posture "$reconcile_root/reconcile-report.json" reconcile settled 3
 reconciled_basis=$(
   jq -r '.settlement.patch.resultingBasis' "$reconcile_root/reconcile-report.json"
 )
-test "$reconciled_basis" = "$(request_basis_for reconciled "$reconcile_path" after 91)"
+test "$reconciled_basis" = "$(request_basis_for reconciled "$reconcile_path" after 82)"
 # And not a basis over the pre-state, so the equality above cannot be met by a
 # reconciler that retained the wrong bytes.
-test "$reconciled_basis" != "$(request_basis_for reconciled-pre "$reconcile_path" before 92)"
+test "$reconciled_basis" != "$(request_basis_for reconciled-pre "$reconcile_path" before 82)"
 # Reconciliation is a separate write entrypoint from apply. The every-write-
 # phase epoch guarantee has to be shown here too, not only on the golden path.
 assert_chained_writer_epoch \
@@ -773,10 +779,11 @@ run_phase \
 assert_posture "$basis_root/first-settlement.json" apply settled 3
 test "$(cat "$basis_workspace/$basis_path")" = "$basis_after"
 
-# The workspace now holds the first post-state. The second patch observes it.
+# The workspace now holds the first post-state. The second patch observes it,
+# on the same worldline, so the comparisons below vary only the bytes.
 make_case \
   "$basis_root/second.json" \
-  96 \
+  95 \
   "$basis_path" \
   "$(hex_bytes "$basis_after")" \
   "$(hex_bytes "$basis_final")" \
