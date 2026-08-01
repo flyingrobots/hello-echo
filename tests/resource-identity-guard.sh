@@ -179,6 +179,36 @@ printf '%s\n' "$good_reconcile" >"$work/spaced/reconciliation-law.sha256"
 write_source "$work/spaced.edict" "$good_input" "$good_settlement" "$good_reconcile"
 expect_reject "$work/spaced" "$work/spaced.edict" "whitespace inside the sidecar identity"
 
+# A sidecar carrying a second identity is not canonical. Counting newlines is
+# not enough to see this: a two-line file whose final line has no terminator
+# contains one newline character, so a line count reports it as single-line.
+mkdir -p "$work/twoline"
+printf '%s\n%s' "$good_input" \
+  sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef \
+  >"$work/twoline/input-schema.sha256"
+printf '%s\n' "$good_settlement" >"$work/twoline/settlement-schema.sha256"
+printf '%s\n' "$good_reconcile" >"$work/twoline/reconciliation-law.sha256"
+write_source "$work/twoline.edict" "$good_input" "$good_settlement" "$good_reconcile"
+expect_reject "$work/twoline" "$work/twoline.edict" "sidecar carrying a second identity"
+
+# The same, with the trailing terminator present.
+mkdir -p "$work/twoline2"
+printf '%s\n%s\n' "$good_input" \
+  sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef \
+  >"$work/twoline2/input-schema.sha256"
+printf '%s\n' "$good_settlement" >"$work/twoline2/settlement-schema.sha256"
+printf '%s\n' "$good_reconcile" >"$work/twoline2/reconciliation-law.sha256"
+write_source "$work/twoline2.edict" "$good_input" "$good_settlement" "$good_reconcile"
+expect_reject "$work/twoline2" "$work/twoline2.edict" "sidecar with a terminated second identity"
+
+# Trailing content that is not a whole line must also fail.
+mkdir -p "$work/trailing"
+printf '%s\n \n' "$good_input" >"$work/trailing/input-schema.sha256"
+printf '%s\n' "$good_settlement" >"$work/trailing/settlement-schema.sha256"
+printf '%s\n' "$good_reconcile" >"$work/trailing/reconciliation-law.sha256"
+write_source "$work/trailing.edict" "$good_input" "$good_settlement" "$good_reconcile"
+expect_reject "$work/trailing" "$work/trailing.edict" "sidecar with trailing content"
+
 # A trailing newline is the one permitted terminator and must still be accepted.
 mkdir -p "$work/nonewline"
 printf '%s' "$good_input" >"$work/nonewline/input-schema.sha256"

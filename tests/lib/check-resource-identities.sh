@@ -91,9 +91,14 @@ do
   # would treat as a failure, so its status is discarded and the value printed
   # unconditionally.
   identity=$(IFS= read -r line <"$sidecar" || true; printf '%s' "$line")
-  # A sidecar carrying more than one line is not a canonical identity either.
-  if test "$(wc -l <"$sidecar" | tr -d ' ')" -gt 1; then
-    echo "resource $resource has a multi-line identity sidecar" >&2
+  # The sidecar must hold exactly the identity and at most one terminator.
+  # Counting newlines cannot express that: a two-line file whose final line has
+  # no terminator contains one newline and reports as single-line, so a second
+  # identity would go unseen. Comparing byte counts admits only the identity
+  # itself or the identity plus its terminator.
+  sidecar_bytes=$(wc -c <"$sidecar" | tr -d ' ')
+  if test "$sidecar_bytes" -gt "$((${#identity} + 1))"; then
+    echo "resource $resource has trailing content after its identity" >&2
     exit 1
   fi
 
