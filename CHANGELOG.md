@@ -36,8 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   witness cases requiring a fresh epoch per write phase, exact predecessor and
   final-commit-digest linkage, a strictly advancing start LSN, no epoch on
   read-only phases, and no epoch reused across the ordered golden path.
-- Build refusal for unresolved or sentinel external-action schema identities in
-  the vendored compiler source.
+- Build refusal for cross-wired, unresolved, or sentinel external-action schema
+  identities in the vendored compiler source, enforced by a single shared guard
+  that binds each schema slot to the vendored artifact it names.
+- Hermetic `tests/resource-identity-guard.sh` covering that guard against
+  crafted closures, requiring no producer checkout and no `cargo`.
 
 ### Changed
 

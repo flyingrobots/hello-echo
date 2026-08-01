@@ -29,31 +29,13 @@ do
   cmp "effect/vendor/workspace-snapshot/$artifact" "$fixture_source/$artifact"
 done
 
-# Every external-action resource identity in the compiler source must resolve to
-# a vendored artifact whose generator-owned digest sidecar carries that exact
-# identity. An unresolved or sentinel identity fails the build closed.
-for resource in input-schema settlement-schema reconciliation-law
-do
-  identity=$(tr -d '[:space:]' <"effect/vendor/workspace-snapshot/$resource.sha256")
-  case "$identity" in
-    sha256:????????????????????????????????????????????????????????????????) ;;
-    *)
-      echo "resource $resource has a malformed identity digest" >&2
-      exit 1
-      ;;
-  esac
-  grep -qF "$identity" effect/src/observe-workspace.edict || {
-    echo "compiler source does not pin the vendored $resource identity" >&2
-    exit 1
-  }
-done
-
-# The compiler source must not retain any unresolved schema reference.
-if grep -nE 'digest "sha256:(([0-9a-f])\2{63})"' effect/src/observe-workspace.edict
-then
-  echo "compiler source retains a sentinel schema digest" >&2
-  exit 1
-fi
+# Every external-action schema slot in the compiler source must pin the exact
+# identity of the vendored artifact that slot names. A cross-wired, unresolved,
+# or sentinel identity fails the build closed.
+tests/lib/check-resource-identities.sh \
+  workspace.snapshot \
+  effect/vendor/workspace-snapshot \
+  effect/src/observe-workspace.edict
 
 mkdir -p .build/effect
 provider_source="$ECHO_REPO/schemas/edict-provider/package/v1"

@@ -33,40 +33,13 @@ do
   cmp "patch/vendor/workspace-patch/$artifact" "$fixture_source/$artifact"
 done
 
-# Every external-action resource identity in the compiler source must resolve to
-# a vendored artifact whose generator-owned digest sidecar carries that exact
-# identity. An unresolved or sentinel identity fails the build closed.
-for resource in input-schema settlement-schema reconciliation-law
-do
-  identity=$(tr -d '[:space:]' <"patch/vendor/workspace-patch/$resource.sha256")
-  case "$identity" in
-    sha256:????????????????????????????????????????????????????????????????) ;;
-    *)
-      echo "resource $resource has a malformed identity digest" >&2
-      exit 1
-      ;;
-  esac
-  case "$identity" in
-    *0000000000000000|*1111111111111111|*2222222222222222|*3333333333333333|\
-    *4444444444444444|*5555555555555555|*6666666666666666|*7777777777777777|\
-    *8888888888888888|*9999999999999999)
-      echo "resource $resource still pins a sentinel identity digest" >&2
-      exit 1
-      ;;
-  esac
-  grep -qF "$identity" patch/src/apply-validated-patch.edict || {
-    echo "compiler source does not pin the vendored $resource identity" >&2
-    exit 1
-  }
-done
-
-# The compiler source must not retain any unresolved schema reference.
-if grep -nE 'digest "sha256:(0{64}|1{64}|2{64}|3{64}|4{64}|5{64}|6{64}|7{64}|8{64}|9{64})"' \
+# Every external-action schema slot in the compiler source must pin the exact
+# identity of the vendored artifact that slot names. A cross-wired, unresolved,
+# or sentinel identity fails the build closed.
+tests/lib/check-resource-identities.sh \
+  workspace.patch \
+  patch/vendor/workspace-patch \
   patch/src/apply-validated-patch.edict
-then
-  echo "compiler source retains a sentinel schema digest" >&2
-  exit 1
-fi
 
 mkdir -p .build/patch
 provider_source="$ECHO_REPO/schemas/edict-provider/package/v1"
