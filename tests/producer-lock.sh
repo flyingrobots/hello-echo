@@ -36,6 +36,16 @@ check_producer() {
     echo "$name checkout is $actual but $lock pins $expected" >&2
     exit 1
   fi
+  # A commit id says nothing about the working tree. Uncommitted edits to the
+  # producer leave rev-parse reporting the pinned commit while the build
+  # compiles different sources, so the run would claim a pin it is not
+  # honouring. The vendored artifact comparisons do not cover this: they check
+  # the fixtures, not the compiler and host crates the build actually uses.
+  if test -n "$(git -C "$checkout" status --porcelain)"; then
+    echo "$name checkout has uncommitted changes and is not the pinned $expected" >&2
+    git -C "$checkout" status --porcelain >&2
+    exit 1
+  fi
 }
 
 check_producer edict "$EDICT_REPO"

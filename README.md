@@ -30,8 +30,11 @@ bootstrap workload.
 
 `producers.lock.json` records the exact Edict and Echo commits this repository
 is proven against. Every build boundary calls `tests/producer-lock.sh` first
-and refuses a checkout that is not those commits, so a stale producer fails
-loudly instead of producing a misleading result. CI reads the same file and
+and refuses a checkout that is not those commits, or that has uncommitted
+changes, so a stale or locally modified producer fails loudly instead of
+producing a misleading result. A commit id alone would not catch the second
+case: edits to the producer leave `rev-parse` reporting the pinned commit while
+the build compiles different sources. CI reads the same file and
 checks the producers out at those commits.
 
 Advancing a producer means changing that file in the same commit as the

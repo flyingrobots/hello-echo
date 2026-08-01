@@ -64,8 +64,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   above the encodable ceiling and a declared pre-state above the file budget.
 
 - `producers.lock.json` pinning the exact Edict and Echo commits, enforced at
-  every build boundary by `tests/producer-lock.sh`, so a stale or mismatched
-  producer checkout fails rather than silently changing what is proven.
+  every build boundary by `tests/producer-lock.sh`, so a stale, mismatched, or
+  locally modified producer checkout fails rather than silently changing what
+  is proven.
 - A CI workflow that reads that lock, checks the producers out at those
   commits, and runs the complete witness gate plus shell syntax, formatting,
   and strict clippy on pull requests and pushes to `main`.
