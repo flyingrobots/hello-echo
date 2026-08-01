@@ -586,6 +586,8 @@ jq -e '
   and .obstruction == "replacementExceedsRequestBudget"
   and .wal.commitCount == 0
 ' "$oversize_root/report.json" >/dev/null
+# A refusal must leave the workspace alone, not merely skip the WAL commit.
+test "$(cat "$oversize_root/workspace/notes/big.txt")" = hello
 
 # Settlement-size boundary: the request-only settlement floor (the encoded
 # result size, never below the host minimum) succeeds; one byte less refuses

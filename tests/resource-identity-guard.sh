@@ -217,4 +217,21 @@ printf '%s\n' "$good_reconcile" >"$work/nonewline/reconciliation-law.sha256"
 write_source "$work/nonewline.edict" "$good_input" "$good_settlement" "$good_reconcile"
 expect_accept "$work/nonewline" "$work/nonewline.edict" "sidecar without a trailing newline"
 
+# A vendor directory missing a sidecar entirely must fail. Without a case the
+# guard's dedicated branch for it is an unproven claim, which is the thing this
+# file exists to prevent.
+mkdir -p "$work/nosidecar"
+printf '%s\n' "$good_settlement" >"$work/nosidecar/settlement-schema.sha256"
+printf '%s\n' "$good_reconcile" >"$work/nosidecar/reconciliation-law.sha256"
+write_source "$work/nosidecar.edict" "$good_input" "$good_settlement" "$good_reconcile"
+expect_reject "$work/nosidecar" "$work/nosidecar.edict" "vendor directory missing a sidecar"
+
+# An empty sidecar is present but names nothing.
+mkdir -p "$work/emptysidecar"
+: >"$work/emptysidecar/input-schema.sha256"
+printf '%s\n' "$good_settlement" >"$work/emptysidecar/settlement-schema.sha256"
+printf '%s\n' "$good_reconcile" >"$work/emptysidecar/reconciliation-law.sha256"
+write_source "$work/emptysidecar.edict" "$good_input" "$good_settlement" "$good_reconcile"
+expect_reject "$work/emptysidecar" "$work/emptysidecar.edict" "empty identity sidecar"
+
 echo "resource identity guard: all cases passed"
