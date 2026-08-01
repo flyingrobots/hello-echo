@@ -120,6 +120,14 @@ do
   # asking whether anything is left, rather than by enumerating the fills seen
   # so far: the patch closure used all-9/8/7 and the observation closure used
   # all-b/c/d, so any enumeration is a list of yesterday's placeholders.
+  #
+  # This cannot tell a placeholder from a genuine digest that happens to be
+  # uniform, and would reject one. Sixteen of the 2^256 possible digests are
+  # uniform, so that is a probability near 10^-76, against a producer
+  # regression to placeholders that has already happened twice. If it ever does
+  # fire on real generator output, regenerating the artifact resolves it.
+  # Recomputing the identity locally is not an option: it is a canonical
+  # resource identity owned by the generator, not a hash of the file bytes.
   first=${body%"${body#?}"}
   if test -z "$(printf '%s' "$body" | tr -d "$first")"; then
     echo "resource $resource still pins a sentinel identity digest" >&2
