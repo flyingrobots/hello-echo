@@ -26,9 +26,20 @@ basis-bound patch application, Graft hosting, Git and GitHub adapters, and the
 self-hosted delivery loop. The delivery loop is Roadmap Ω, not Hello Echo's
 bootstrap workload.
 
+## Producer pin
+
+`producers.lock.json` records the exact Edict and Echo commits this repository
+is proven against. Every build boundary calls `tests/producer-lock.sh` first
+and refuses a checkout that is not those commits, so a stale producer fails
+loudly instead of producing a misleading result. CI reads the same file and
+checks the producers out at those commits.
+
+Advancing a producer means changing that file in the same commit as the
+re-vendored artifacts it implies.
+
 ## Local build
 
-Set `EDICT_REPO` and `ECHO_REPO` to compatible local checkouts, then run:
+Set `EDICT_REPO` and `ECHO_REPO` to checkouts at the pinned commits, then run:
 
 ```sh
 EDICT_REPO=/path/to/edict \
@@ -149,8 +160,8 @@ bounded workspace adapter. It proves:
 The request pins `workspace.snapshot.input@1`,
 `workspace.snapshot.settlement@1`, and `workspace.snapshot.reconcile@1` to the
 exact identities of vendored `edict.external-action-resource/v1` artifacts,
-supplied to the build through `externalActionResources`. An unresolved or
-sentinel schema identity fails the build closed.
+supplied to the build through `externalActionResources`. Edict validates that
+closure; Hello Echo corroborates the artifacts and invokes the validator.
 
 The fixed suite contains one ordered golden path, one relative
 compiler-artifact path probe, one idempotent retry, one conflicting retry, one
@@ -261,8 +272,10 @@ The runtime witness proves:
 The request pins `workspace.patch.input@1`, `workspace.patch.settlement@1`, and
 `workspace.patch.reconcile@1` to the exact identities of vendored
 `edict.external-action-resource/v1` artifacts, supplied to the build through
-`externalActionResources`. An unresolved or sentinel schema identity fails the
-build closed.
+`externalActionResources`. Edict recomputes and validates the complete closure
+and refuses a malformed, missing, substituted, or unresolved resource. Hello
+Echo corroborates those artifacts byte-for-byte and invokes that validator; it
+does not reparse Edict source.
 
 Writer-epoch fencing is producer-owned. Each host phase is a separate process,
 and it calls Echo's `FilesystemWalStore::acquire_fresh_writer_epoch`, which

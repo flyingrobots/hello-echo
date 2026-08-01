@@ -4,6 +4,9 @@ set -eu
 : "${EDICT_REPO:?set EDICT_REPO to the compatible Edict checkout}"
 : "${ECHO_REPO:?set ECHO_REPO to the compatible Echo checkout}"
 
+# The producer pair is pinned in-repository, not chosen by the caller.
+./tests/producer-lock.sh
+
 test -f "$EDICT_REPO/crates/edict-cli/Cargo.toml"
 test -f "$ECHO_REPO/Cargo.toml"
 

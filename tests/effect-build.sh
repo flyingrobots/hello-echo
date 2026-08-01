@@ -4,6 +4,9 @@ set -eu
 : "${EDICT_REPO:?set EDICT_REPO to the compatible Edict checkout}"
 : "${ECHO_REPO:?set ECHO_REPO to the compatible Echo checkout}"
 
+# The producer pair is pinned in-repository, not chosen by the caller.
+./tests/producer-lock.sh
+
 command -v jq >/dev/null
 
 EDICT_REPO=$(CDPATH='' cd -- "$EDICT_REPO" && pwd -P)
@@ -28,14 +31,6 @@ for artifact in \
 do
   cmp "effect/vendor/workspace-snapshot/$artifact" "$fixture_source/$artifact"
 done
-
-# Every external-action schema slot in the compiler source must pin the exact
-# identity of the vendored artifact that slot names. A cross-wired, unresolved,
-# or sentinel identity fails the build closed.
-tests/lib/check-resource-identities.sh \
-  workspace.snapshot \
-  effect/vendor/workspace-snapshot \
-  effect/src/observe-workspace.edict
 
 mkdir -p .build/effect
 provider_source="$ECHO_REPO/schemas/edict-provider/package/v1"

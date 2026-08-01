@@ -33,8 +33,10 @@ cargo xtask lawpack-goldens
 Then copy the fourteen exact files and
 `fixtures/lawpack/workspace-patch/apply-validated-patch.edict` into this
 repository. `tests/patch-build.sh` compares the complete local closure with the
-selected Edict checkout before invoking the public application build, and
-refuses any unresolved or sentinel schema identity.
+selected Edict checkout before invoking the public application build. Edict
+owns validation of that closure and refuses malformed, missing, substituted,
+and unresolved resources; Hello Echo does not reparse the source to re-check
+what the compiler already enforces.
 
 Hello Echo does not regenerate, reinterpret, or replace the closure. Echo owns
 dynamic admission, bounded mutation, durable settlement, reconciliation, and

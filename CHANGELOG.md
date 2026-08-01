@@ -55,17 +55,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   in that case.
 - `wal.lastCommitDigest` in both reports, so a successor epoch's declared
   predecessor commit can be compared with the commit that actually closed it.
-- Build refusal for cross-wired, unresolved, or sentinel external-action schema
-  identities in the vendored compiler source, enforced by a single shared guard
-  that binds each schema slot to the vendored artifact it names.
-- Hermetic `tests/resource-identity-guard.sh` and
-  `tests/writer-epoch-assertions.sh` covering the build guard and the shared
-  writer-epoch assertions against crafted closures and mutated reports. Both
-  require no producer checkout and no `cargo`.
+- Hermetic `tests/writer-epoch-assertions.sh` covering the shared writer-epoch
+  assertions against mutated reports. It requires no producer checkout and no
+  `cargo`.
 
 - `replacementExceedsRequestBudget` and `observationExceedsFileBudget` as
   distinct request obstructions, with witness cases covering a replacement
   above the encodable ceiling and a declared pre-state above the file budget.
+
+- `producers.lock.json` pinning the exact Edict and Echo commits, enforced at
+  every build boundary by `tests/producer-lock.sh`, so a stale or mismatched
+  producer checkout fails rather than silently changing what is proven.
+- A CI workflow that reads that lock, checks the producers out at those
+  commits, and runs the complete witness gate plus shell syntax, formatting,
+  and strict clippy on pull requests and pushes to `main`.
+
+### Removed
+
+- `tests/lib/check-resource-identities.sh` and
+  `tests/resource-identity-guard.sh`. The guard had grown into a second Edict
+  parser written in shell and living in the consumer: declaration syntax,
+  comments, coordinates, same-line clauses, sidecar terminators, digest
+  grammar, and placeholder recognition. Edict owns canonical resource
+  construction, identity derivation, closure validation, and rejection of
+  malformed, missing, substituted, and sentinel resources, and the build
+  already corroborates every artifact byte-for-byte and invokes that validator.
+  Hello Echo corroborates Edict artifacts; it does not partially reparse Edict
+  source.
 
 ### Changed
 

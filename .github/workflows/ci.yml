@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  witnesses:
+    name: Witness gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Hello Echo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Read the pinned producer commits
+        id: producers
+        run: |
+          set -eu
+          test "$(jq -r '.version' producers.lock.json)" = 1
+          {
+            printf 'edict_repo=%s\n' "$(jq -r '.edict.repository' producers.lock.json)"
+            printf 'edict_commit=%s\n' "$(jq -r '.edict.commit' producers.lock.json)"
+            printf 'echo_repo=%s\n' "$(jq -r '.echo.repository' producers.lock.json)"
+            printf 'echo_commit=%s\n' "$(jq -r '.echo.commit' producers.lock.json)"
+          } >>"$GITHUB_OUTPUT"
+
+      # The producer repositories are private, so a token with read access to
+      # them is required. Without it the witnesses cannot run at all, which is
+      # a failure rather than something to skip past.
+      - name: Check out Edict at the pinned commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: ${{ steps.producers.outputs.edict_repo }}
+          ref: ${{ steps.producers.outputs.edict_commit }}
+          token: ${{ secrets.PRODUCER_READ_TOKEN }}
+          path: .producers/edict
+
+      - name: Check out Echo at the pinned commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: ${{ steps.producers.outputs.echo_repo }}
+          ref: ${{ steps.producers.outputs.echo_commit }}
+          token: ${{ secrets.PRODUCER_READ_TOKEN }}
+          path: .producers/echo
+
+      - name: Install the Rust toolchain
+        run: |
+          set -eu
+          rustup toolchain install stable --profile minimal \
+            --component rustfmt --component clippy
+          rustup default stable
+
+      - name: Install witness tools
+        run: |
+          set -eu
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends b3sum xxd
+
+      - name: Cache cargo
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            .build
+          key: cargo-${{ runner.os }}-${{ steps.producers.outputs.edict_commit }}-${{ steps.producers.outputs.echo_commit }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: Check shell syntax
+        run: |
+          set -eu
+          for script in tests/*.sh tests/lib/*.sh; do
+            test -e "$script" || continue
+            sh -n "$script"
+          done
+
+      - name: Verify the producer lock
+        env:
+          EDICT_REPO: .producers/edict
+          ECHO_REPO: .producers/echo
+        run: ./tests/producer-lock.sh
+
+      # Every witness builds what it needs, so the build boundaries are covered
+      # by the suites that invoke them.
+      - name: Run the pure runtime witness
+        env:
+          EDICT_REPO: .producers/edict
+          ECHO_REPO: .producers/echo
+        run: ./tests/runtime.sh
+
+      - name: Run the workspace observation witness
+        env:
+          EDICT_REPO: .producers/edict
+          ECHO_REPO: .producers/echo
+        run: ./tests/effect-runtime.sh
+
+      - name: Run the validated patch witness
+        env:
+          EDICT_REPO: .producers/edict
+          ECHO_REPO: .producers/echo
+        run: ./tests/patch-runtime.sh
+
+      - name: Run the stale-output witness
+        env:
+          EDICT_REPO: .producers/edict
+          ECHO_REPO: .producers/echo
+        run: ./tests/build-cleans-output.sh
+
+      - name: Run the hermetic assertion tests
+        run: ./tests/writer-epoch-assertions.sh
+
+      - name: Check host formatting
+        run: |
+          set -eu
+          cargo fmt --manifest-path .build/effect/host/Cargo.toml -- --check
+          cargo fmt --manifest-path .build/patch/host/Cargo.toml -- --check
+
+      - name: Lint the generated hosts
+        run: |
+          set -eu
+          cargo clippy --manifest-path .build/effect/host/Cargo.toml \
+            --target-dir .build/effect/host-target --all-targets -- -D warnings
+          cargo clippy --manifest-path .build/patch/host/Cargo.toml \
+            --target-dir .build/patch/host-target --all-targets -- -D warnings
