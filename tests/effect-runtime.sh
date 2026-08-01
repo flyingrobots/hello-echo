@@ -100,6 +100,43 @@ assert_identity() {
   ' "$report_file" >/dev/null
 }
 
+# A write phase must run under a fresh Echo-derived writer epoch. Hello Echo
+# supplies no epoch identity, so the reported epoch proves the producer chained
+# it to the persisted predecessor rather than reusing a static fencing identity
+# across host restarts.
+assert_first_writer_epoch() {
+  report_file=$1
+  jq -e '
+    (.writerEpoch.epochId | test("^[0-9a-f]{64}$"))
+    and .writerEpoch.previousEpochId == null
+    and .writerEpoch.previousEpochFinalCommitDigest == null
+    and .writerEpoch.startedAtLsn == 0
+  ' "$report_file" >/dev/null
+}
+
+# Each later write phase is a separate host process. Its epoch must be new and
+# must name the previous epoch and that epoch's final commit digest.
+assert_chained_writer_epoch() {
+  report_file=$1
+  previous_report=$2
+  jq -e \
+    --slurpfile previous "$previous_report" \
+    '
+      (.writerEpoch.epochId | test("^[0-9a-f]{64}$"))
+      and (.writerEpoch.previousEpochFinalCommitDigest | test("^[0-9a-f]{64}$"))
+      and .writerEpoch.epochId != $previous[0].writerEpoch.epochId
+      and .writerEpoch.previousEpochId == $previous[0].writerEpoch.epochId
+      and .writerEpoch.startedAtLsn > $previous[0].writerEpoch.startedAtLsn
+    ' \
+    "$report_file" >/dev/null
+}
+
+# Read-only phases take no writer lease and therefore acquire no epoch.
+assert_no_writer_epoch() {
+  report_file=$1
+  jq -e '.writerEpoch == null' "$report_file" >/dev/null
+}
+
 assert_posture() {
   report_file=$1
   phase=$2
@@ -182,6 +219,12 @@ run_phase request "$golden_case" "$golden_wal" "$golden_root/request-report.json
 assert_posture "$golden_root/request-report.json" request requested 1
 test ! -e "$golden_workspace/$golden_path"
 
+# The first write phase opens the epoch chain on a fresh WAL, and Echo persists
+# the ledger and the writer lease that fence it.
+assert_first_writer_epoch "$golden_root/request-report.json"
+test -s "$golden_wal/writer-epochs.ecwal"
+test -e "$golden_wal/writer-epoch.lock"
+
 project_root=$(pwd -P)
 (
   cd "$effect_root"
@@ -197,13 +240,18 @@ assert_posture "$golden_root/relative-artifact-report.json" inspect requested 1
 
 run_phase inspect "$golden_case" "$golden_wal" "$golden_root/request-recovery.json"
 assert_posture "$golden_root/request-recovery.json" inspect requested 1
+assert_no_writer_epoch "$golden_root/request-recovery.json"
 
 run_phase claim "$golden_case" "$golden_wal" "$golden_root/claim-report.json"
 assert_posture "$golden_root/claim-report.json" claim claimed 2
+assert_chained_writer_epoch \
+  "$golden_root/claim-report.json" \
+  "$golden_root/request-report.json"
 test ! -e "$golden_workspace/$golden_path"
 
 run_phase inspect "$golden_case" "$golden_wal" "$golden_root/claim-recovery.json"
 assert_posture "$golden_root/claim-recovery.json" inspect claimed 2
+assert_no_writer_epoch "$golden_root/claim-recovery.json"
 
 printf '%s' "$golden_value" >"$golden_workspace/$golden_path"
 run_phase \
@@ -214,6 +262,21 @@ run_phase \
   "$golden_workspace"
 golden_settlement="$golden_root/settlement-report.json"
 assert_posture "$golden_settlement" settle settled 3
+assert_chained_writer_epoch "$golden_settlement" "$golden_root/claim-report.json"
+
+# No writer epoch is reused anywhere in the ordered golden path, and the
+# retained ledger stays bounded rather than growing per restart.
+test "$(
+  jq -r '.writerEpoch.epochId' \
+    "$golden_root/request-report.json" \
+    "$golden_root/claim-report.json" \
+    "$golden_settlement" |
+    sort -u |
+    wc -l |
+    tr -d ' '
+)" = 3
+test "$(wc -c <"$golden_wal/writer-epochs.ecwal" | tr -d ' ')" -le 4096
+
 jq -e \
   --arg path "$golden_path" \
   --arg bytes_hex "$(hex_bytes "$golden_value")" \
