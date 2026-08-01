@@ -123,6 +123,34 @@ if assert_no_writer_epoch "$work/absent.json" 2>/dev/null; then
 fi
 printf 'ok   rejected: report omitting writerEpoch entirely\n'
 
+# The predecessor report is input as well. A mutation loop that only damages
+# the successor never reaches the path where a missing predecessor field is
+# read as null and satisfies the linkage.
+for damage in 'del(.writerEpoch)' 'del(.writerEpoch.epochId)' \
+  'del(.writerEpoch.startedAtLsn)' 'del(.wal)' 'del(.wal.lastCommitDigest)' \
+  '.writerEpoch.epochId = "not-a-digest"' '.wal.lastCommitDigest = "short"'
+do
+  jq "$damage" "$work/request.json" >"$work/prev-damaged.json"
+  if assert_chained_writer_epoch "$work/claim.json" "$work/prev-damaged.json" \
+    2>/dev/null
+  then
+    printf 'FAIL assertion accepted a damaged predecessor: %s\n' "$damage" >&2
+    exit 1
+  fi
+  printf 'ok   rejected damaged predecessor: %s\n' "$damage"
+done
+
+# The specific null == null path: neither side names an epoch.
+jq 'del(.writerEpoch)' "$work/request.json" >"$work/prev-none.json"
+jq '.writerEpoch.previousEpochId = null' "$work/claim.json" >"$work/succ-null.json"
+if assert_chained_writer_epoch "$work/succ-null.json" "$work/prev-none.json" \
+  2>/dev/null
+then
+  echo 'FAIL assertion accepted null linked to null' >&2
+  exit 1
+fi
+printf 'ok   rejected: null predecessor linked to null successor\n'
+
 # A read-only phase that acquired a lease would be a silent authority
 # escalation, so the null assertion must not accept a populated epoch.
 if assert_no_writer_epoch "$work/claim.json" 2>/dev/null; then

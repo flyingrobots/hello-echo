@@ -8,6 +8,9 @@ command -v jq >/dev/null
 # The witness binds the reported content digests to the witnessed bytes, which
 # needs the same hash the adapter uses.
 command -v b3sum >/dev/null
+# The binary property cases hash from hex, because a binary body cannot survive
+# a shell variable.
+command -v xxd >/dev/null
 
 if ! test -x ./tests/patch-build.sh; then
   echo "Hello Effect patch build boundary is not implemented" >&2
@@ -443,6 +446,64 @@ jq -e '
   and .settlement.externalEvidenceDigest == .settlement.patch.evidence
 ' "$unknown_root/reconcile-report.json" >/dev/null
 test "$(cat "$unknown_workspace/ambiguous.txt")" = ambiguous
+
+# This is the one settlement family where the declared replacement and the
+# observed post-state differ: the request asks for one thing and the crash
+# leaves another. In every success case those two byte strings are identical,
+# so only here can a test tell which of them the retained evidence describes.
+#
+# Echo derives this evidence by wrapping the observed basis in a further
+# domain-separated hash. Recomputing that would rebuild producer logic in the
+# consumer. The property is pinned instead: the evidence must vary with the
+# observed bytes and must not vary with the declared replacement. A producer
+# deriving it from the declared replacement fails the first check; one ignoring
+# the observation fails the second.
+unknown_evidence_for() {
+  probe_root="$patch_root/unknown-evidence-$1"
+  probe_workspace="$probe_root/workspace"
+  mkdir -p "$probe_workspace"
+  printf '%s' before >"$probe_workspace/ambiguous.txt"
+  make_case \
+    "$probe_root/request.json" \
+    "$4" \
+    ambiguous.txt \
+    "$(hex_bytes before)" \
+    "$(hex_bytes "$2")" \
+    ambiguous.txt \
+    65536
+  run_phase request "$probe_root/request.json" "$probe_root/wal" "$probe_root/req.json"
+  run_phase claim "$probe_root/request.json" "$probe_root/wal" "$probe_root/clm.json"
+  printf '%s' "$3" >"$probe_workspace/ambiguous.txt"
+  run_phase \
+    reconcile \
+    "$probe_root/request.json" \
+    "$probe_root/wal" \
+    "$probe_root/settle.json" \
+    "$probe_workspace"
+  jq -e '.settlement.kind == "outcomeUnknown"' "$probe_root/settle.json" >/dev/null
+  jq -r '.settlement.patch.evidence' "$probe_root/settle.json"
+}
+
+# Same declared replacement, different observed post-states.
+evidence_observed_one=$(unknown_evidence_for one intended observedOne 97)
+evidence_observed_two=$(unknown_evidence_for two intended observedTwo 98)
+test "$evidence_observed_one" != "$evidence_observed_two"
+
+# Different declared replacement, same observed post-state.
+evidence_other_request=$(unknown_evidence_for three requested observedOne 99)
+test "$evidence_other_request" = "$evidence_observed_one"
+
+# In an outcomeUnknown settlement `beforeContentDigest` carries the digest of
+# the bytes that were actually observed, not of the declared pre-state: the
+# reconciler has no witnessed pre-state to report, so the field describes what
+# it found. Pinning it here records that reading, which the field name alone
+# does not convey.
+jq -e \
+  --arg observed_digest "$(content_digest ambiguous)" \
+  --arg declared_digest "$(content_digest before)" \
+  '.settlement.patch.beforeContentDigest == $observed_digest
+    and .settlement.patch.beforeContentDigest != $declared_digest' \
+  "$unknown_root/reconcile-report.json" >/dev/null
 
 assert_rejected_case() {
   case_name=$1

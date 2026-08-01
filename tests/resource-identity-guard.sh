@@ -308,4 +308,21 @@ intent applyValidated(input: ApplyPatchInput)
 EOF
 expect_accept "$work/good" "$work/bareword.edict" "coordinate outside its clause is not the slot"
 
+# Two clauses packed onto one line. The successor's digest must not satisfy the
+# slot that declares none, even when both resources share an identity, which is
+# what makes the substitution invisible to a value comparison.
+mkdir -p "$work/oneline"
+printf '%s\n' "$good_input" >"$work/oneline/input-schema.sha256"
+printf '%s\n' "$good_input" >"$work/oneline/settlement-schema.sha256"
+printf '%s\n' "$good_reconcile" >"$work/oneline/reconciliation-law.sha256"
+cat >"$work/oneline.edict" <<EOF
+intent applyValidated(input: ApplyPatchInput)
+{
+    input schema workspace.patch.input@1 settlement schema workspace.patch.settlement@1 digest "$good_input"
+    reconcile workspace.patch.reconcile@1
+      digest "$good_reconcile";
+}
+EOF
+expect_reject "$work/oneline" "$work/oneline.edict" "two clauses on one line donating a digest"
+
 echo "resource identity guard: all cases passed"

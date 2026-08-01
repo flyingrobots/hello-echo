@@ -41,6 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - A retained-ledger plateau case in both witnesses, driving sixteen fresh
   writer epochs on one WAL and requiring the persisted ledger to stop changing
   size, which a fixed-size ceiling could not establish.
+- Negative coverage for the retained postcondition evidence: the one settlement
+  family where the declared replacement and the observed post-state differ now
+  pins that the evidence varies with what was observed and not with what was
+  requested, and records that `beforeContentDigest` reports the observed bytes
+  in that case.
 - `wal.lastCommitDigest` in both reports, so a successor epoch's declared
   predecessor commit can be compared with the commit that actually closed it.
 - Build refusal for cross-wired, unresolved, or sentinel external-action schema

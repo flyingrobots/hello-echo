@@ -39,6 +39,14 @@ declared_identity() {
       }
       return text
     }
+    function trim_at_next_coordinate(text) {
+      # Any further @N on the line begins another clause. Everything from there
+      # on belongs to that clause, including its digest.
+      if (match(text, /@[0-9]+/)) {
+        return substr(text, 1, RSTART - 1)
+      }
+      return text
+    }
     function digest_in(text) {
       if (match(text, /digest "[^"]*"/)) {
         return substr(text, RSTART + 8, RLENGTH - 9)
@@ -68,7 +76,10 @@ declared_identity() {
     }
     !seen && names_slot(line) {
       seen = 1
-      found = digest_in(substr(line, index(line, coordinate) + length(coordinate)))
+      # A newline inside an argument list terminates the statement in awk, so
+      # the tail is taken into a variable first.
+      tail_text = substr(line, index(line, coordinate) + length(coordinate))
+      found = digest_in(trim_at_next_coordinate(tail_text))
       if (found != "") {
         print found
         exit
@@ -76,21 +87,19 @@ declared_identity() {
       next
     }
     seen {
-      # A new coordinate ends this declaration immediately. Extracting a digest
-      # here would let a slot that declares none adopt the inline digest of the
-      # slot that follows it, which is invisible when two resources share an
-      # identity. An apostrophe cannot appear in this comment: the awk program
-      # is single-quoted by the enclosing shell.
-      if (line ~ /@[0-9]+/) {
-        exit
-      }
-      found = digest_in(line)
+      # Only the part of the line before any new coordinate belongs to this
+      # declaration. Taking a digest from beyond it would let a slot that
+      # declares none adopt the digest of the slot that follows it, which is
+      # invisible when two resources share an identity. An apostrophe cannot
+      # appear in this comment: the awk program is single-quoted by the shell.
+      found = digest_in(trim_at_next_coordinate(line))
       if (found != "") {
         print found
         exit
       }
-      # The semicolon closes the declaration without a digest having appeared.
-      if (index(line, ";") > 0) {
+      # A new coordinate, or the semicolon, closes this declaration with no
+      # digest having appeared.
+      if (line ~ /@[0-9]+/ || index(line, ";") > 0) {
         exit
       }
     }

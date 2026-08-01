@@ -44,8 +44,17 @@ assert_chained_writer_epoch() {
       and (.writerEpoch | has("previousEpochId"))
       and (.writerEpoch | has("previousEpochFinalCommitDigest"))
       and (.writerEpoch | has("startedAtLsn"))
+      # The predecessor report is input to this assertion, not a trusted
+      # source. Without these, a predecessor carrying no writerEpoch yields
+      # null and a successor reporting previousEpochId null satisfies the
+      # linkage by null == null.
+      and ($previous[0] | has("writerEpoch"))
+      and ($previous[0].writerEpoch | has("epochId"))
+      and ($previous[0].writerEpoch | has("startedAtLsn"))
+      and ($previous[0].writerEpoch.epochId | test("^[0-9a-f]{64}$"))
       and ($previous[0] | has("wal"))
       and ($previous[0].wal | has("lastCommitDigest"))
+      and ($previous[0].wal.lastCommitDigest | test("^[0-9a-f]{64}$"))
       and (.writerEpoch.epochId | test("^[0-9a-f]{64}$"))
       and (.writerEpoch.previousEpochFinalCommitDigest | test("^[0-9a-f]{64}$"))
       and .writerEpoch.epochId != $previous[0].writerEpoch.epochId

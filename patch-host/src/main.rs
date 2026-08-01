@@ -210,6 +210,10 @@ fn application_input(request_case: &RequestCase) -> Result<Vec<u8>, ApplicationI
     // The observation and the replacement are separate inputs with separate
     // faults. Collapsing them would report an oversized pre-state as a
     // replacement-budget refusal and name the wrong input.
+    //
+    // The observation is checked first, so an input oversized in both reports
+    // observationExceedsFileBudget. tests/patch-runtime.sh pins that
+    // obstruction, so reordering these two checks would retarget it.
     if before.len() > max_file_bytes {
         return Err(ApplicationInputRefusal::ObservationExceedsFileBudget);
     }
