@@ -106,6 +106,8 @@ mutate "start LSN is fractional" \
   '.writerEpoch.startedAtLsn = 0.5'
 mutate "start LSN is negative" \
   '.writerEpoch.startedAtLsn = -1'
+mutate "start LSN exceeds u64" \
+  '.writerEpoch.startedAtLsn = 1e100'
 
 # A malformed identity is not an epoch.
 mutate "epoch id is not a digest" \

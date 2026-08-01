@@ -180,7 +180,7 @@ ECHO_REPO=/path/to/echo \
 ./tests/patch-runtime.sh
 ```
 
-This witness needs `b3sum` in addition to `jq`. It compares the content digests
+This witness needs `b3sum` and `xxd` in addition to `jq`. It compares the content digests
 the settlement reports against digests computed from the witnessed bytes, so it
 must hash them the same way the adapter does.
 

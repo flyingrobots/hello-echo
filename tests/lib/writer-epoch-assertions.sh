@@ -60,8 +60,12 @@ assert_chained_writer_epoch() {
       and (.writerEpoch.startedAtLsn | floor) == .writerEpoch.startedAtLsn
       and ($previous[0].writerEpoch.startedAtLsn | floor)
           == $previous[0].writerEpoch.startedAtLsn
+      # An Lsn is a u64. 1e100 is a nonnegative integer to jq and compares
+      # greater than any predecessor, but cannot represent a position.
       and .writerEpoch.startedAtLsn >= 0
       and $previous[0].writerEpoch.startedAtLsn >= 0
+      and .writerEpoch.startedAtLsn <= 18446744073709551615
+      and $previous[0].writerEpoch.startedAtLsn <= 18446744073709551615
       and .writerEpoch.startedAtLsn > $previous[0].writerEpoch.startedAtLsn
     ' \
     "$report_file" >/dev/null

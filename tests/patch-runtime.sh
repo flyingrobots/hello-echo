@@ -45,6 +45,12 @@ content_digest() {
   printf '%s' "$1" | b3sum --no-names | tr -d ' \n'
 }
 
+# The same, for a body supplied as hex on stdin. A binary body cannot survive a
+# shell variable, which is why the property cases carry hex.
+hex_digest() {
+  xxd -r -p | b3sum --no-names | tr -d ' \n'
+}
+
 make_case() {
   case_file=$1
   worldline_byte=$2
@@ -601,6 +607,80 @@ jq -e '
 # A refusal must leave the workspace alone, not merely skip the WAL commit.
 test "$(cat "$oversize_root/workspace/notes/big.txt")" = hello
 
+# The retained workspace-root evidence must describe the witnessed post-state,
+# not merely agree with itself. The three fields the success assertion compares
+# (evidence, externalEvidenceDigest, resultingBasis) would all pass if a
+# producer replaced them with one arbitrary value.
+#
+# Echo derives a basis by domain-separated hashing over the path and bytes.
+# Recomputing that here would rebuild producer logic in the consumer, which is
+# the boundary this witness exists to hold. Instead the host is asked for the
+# same value twice by two independent routes: a second patch that declares the
+# first patch's post-state as its own observed pre-state derives a request
+# basis over those exact bytes, and that must equal the resulting basis the
+# first settlement retained.
+basis_root="$patch_root/resulting-basis"
+basis_workspace="$basis_root/workspace"
+basis_path=notes/basis.txt
+basis_before='basis before'
+basis_after='basis after'
+basis_final='basis final'
+mkdir -p "$basis_workspace/notes"
+printf '%s' "$basis_before" >"$basis_workspace/$basis_path"
+
+make_case \
+  "$basis_root/first.json" \
+  95 \
+  "$basis_path" \
+  "$(hex_bytes "$basis_before")" \
+  "$(hex_bytes "$basis_after")" \
+  "$basis_path" \
+  65536
+run_phase request "$basis_root/first.json" "$basis_root/wal1" "$basis_root/first-request.json"
+run_phase claim "$basis_root/first.json" "$basis_root/wal1" "$basis_root/first-claim.json"
+run_phase \
+  apply \
+  "$basis_root/first.json" \
+  "$basis_root/wal1" \
+  "$basis_root/first-settlement.json" \
+  "$basis_workspace"
+assert_posture "$basis_root/first-settlement.json" apply settled 3
+test "$(cat "$basis_workspace/$basis_path")" = "$basis_after"
+
+# The workspace now holds the first post-state. The second patch observes it.
+make_case \
+  "$basis_root/second.json" \
+  96 \
+  "$basis_path" \
+  "$(hex_bytes "$basis_after")" \
+  "$(hex_bytes "$basis_final")" \
+  "$basis_path" \
+  65536
+run_phase request "$basis_root/second.json" "$basis_root/wal2" "$basis_root/second-request.json"
+run_phase claim "$basis_root/second.json" "$basis_root/wal2" "$basis_root/second-claim.json"
+run_phase \
+  apply \
+  "$basis_root/second.json" \
+  "$basis_root/wal2" \
+  "$basis_root/second-settlement.json" \
+  "$basis_workspace"
+assert_posture "$basis_root/second-settlement.json" apply settled 3
+
+# One basis over (path, basis_after), reached two ways.
+test "$(
+  jq -r '.settlement.patch.requestBasis' "$basis_root/second-settlement.json"
+)" = "$(
+  jq -r '.settlement.patch.resultingBasis' "$basis_root/first-settlement.json"
+)"
+
+# And the two settlements must not share a basis, so the equality above is not
+# satisfied by a constant.
+test "$(
+  jq -r '.settlement.patch.resultingBasis' "$basis_root/second-settlement.json"
+)" != "$(
+  jq -r '.settlement.patch.resultingBasis' "$basis_root/first-settlement.json"
+)"
+
 # An oversized observation is a different fault from an oversized replacement.
 # Reporting both as a replacement-budget refusal would name the wrong input.
 oversize_before_root="$patch_root/oversize-observation"
@@ -774,6 +854,14 @@ do
     "$case_root/workspace"
   assert_posture "$case_root/settlement-report.json" apply settled 3
   test "$(od -An -tx1 "$case_root/workspace/value.bin" | tr -d ' \n')" = "$replacement_hex"
+  # Binary bodies are where a hash that stops at an embedded NUL would still
+  # write the right bytes, so the reported digests are bound here too.
+  jq -e \
+    --arg before_digest "$(printf '%s' "$before_hex" | hex_digest)" \
+    --arg after_digest "$(printf '%s' "$replacement_hex" | hex_digest)" \
+    '.settlement.patch.beforeContentDigest == $before_digest
+      and .settlement.patch.afterContentDigest == $after_digest' \
+    "$case_root/settlement-report.json" >/dev/null
 done
 
 # Bounded stress: eight isolated request/claim/apply worldlines.
