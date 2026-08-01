@@ -91,6 +91,15 @@ mutate "write phase reports no epoch" \
 mutate "predecessor final commit digest is well-formed but wrong" \
   '.writerEpoch.previousEpochFinalCommitDigest = "'"$other"'"'
 
+# jq orders across types, so "oops" > 0 and {} > 0 are both true. A start LSN
+# replaced by malformed data would satisfy a bare > comparison.
+mutate "start LSN is a string" \
+  '.writerEpoch.startedAtLsn = "oops"'
+mutate "start LSN is an object" \
+  '.writerEpoch.startedAtLsn = {}'
+mutate "start LSN is absent" \
+  'del(.writerEpoch.startedAtLsn)'
+
 # A malformed identity is not an epoch.
 mutate "epoch id is not a digest" \
   '.writerEpoch.epochId = "not-a-digest"'

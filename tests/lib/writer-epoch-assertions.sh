@@ -17,6 +17,7 @@ assert_first_writer_epoch() {
     (.writerEpoch.epochId | test("^[0-9a-f]{64}$"))
     and .writerEpoch.previousEpochId == null
     and .writerEpoch.previousEpochFinalCommitDigest == null
+    and (.writerEpoch.startedAtLsn | type) == "number"
     and .writerEpoch.startedAtLsn == 0
   ' "$report_file" >/dev/null
 }
@@ -35,6 +36,8 @@ assert_chained_writer_epoch() {
       and .writerEpoch.previousEpochId == $previous[0].writerEpoch.epochId
       and .writerEpoch.previousEpochFinalCommitDigest
           == $previous[0].wal.lastCommitDigest
+      and (.writerEpoch.startedAtLsn | type) == "number"
+      and ($previous[0].writerEpoch.startedAtLsn | type) == "number"
       and .writerEpoch.startedAtLsn > $previous[0].writerEpoch.startedAtLsn
     ' \
     "$report_file" >/dev/null
