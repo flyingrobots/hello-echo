@@ -139,7 +139,7 @@ bounded workspace adapter. It proves:
   post-claim aperture substitution cannot recover the claim;
 - unauthorized, parent-escaped, symlink, and stale-basis paths settle as typed
   refusals;
-- the exact settlement-size boundary succeeds and one byte less refuses; and
+- the exact settlement-size boundary succeeds and one byte less refuses;
 - substituted compiler artifacts are rejected with the same typed obstruction
   at request and recovery boundaries without appending to the WAL, while
   invalid runtime requests remain a distinct pre-commit refusal; and
