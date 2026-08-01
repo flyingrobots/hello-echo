@@ -98,4 +98,26 @@ write_source "$work/foreign.edict" \
   "$good_reconcile"
 expect_reject "$work/good" "$work/foreign.edict" "settlement slot pins a foreign identity"
 
+# A sidecar whose identity is the right shape and length but not hexadecimal.
+# Only 0-9a-f can name a SHA-256 artifact, so anything else is not an identity.
+write_vendor "$work/nonhex" \
+  sha256:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg \
+  "$good_settlement" "$good_reconcile"
+write_source "$work/nonhex.edict" \
+  sha256:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg \
+  "$good_settlement" "$good_reconcile"
+expect_reject "$work/nonhex" "$work/nonhex.edict" "non-hexadecimal identity"
+
+# Uppercase is not the canonical form the generator emits, so accepting it
+# would let two spellings of one identity both pass.
+upper=sha256:111111111111111111111111111111111111111111111111111111111111111A
+write_vendor "$work/upper" "$upper" "$good_settlement" "$good_reconcile"
+write_source "$work/upper.edict" "$upper" "$good_settlement" "$good_reconcile"
+expect_reject "$work/upper" "$work/upper.edict" "uppercase hexadecimal identity"
+
+# A truncated identity must not be accepted by a length-blind check.
+write_vendor "$work/short" sha256:abc "$good_settlement" "$good_reconcile"
+write_source "$work/short.edict" sha256:abc "$good_settlement" "$good_reconcile"
+expect_reject "$work/short" "$work/short.edict" "truncated identity"
+
 echo "resource identity guard: all cases passed"

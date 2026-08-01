@@ -49,13 +49,24 @@ do
   fi
   identity=$(tr -d '[:space:]' <"$sidecar")
 
+  # Only a lowercase 64-character hexadecimal body can name a SHA-256 artifact.
+  # A character-blind length check would accept sha256:gggg... as an identity.
+  #
+  # The character class is written out rather than as the range [!0-9a-f]
+  # because a bracket range is resolved by the collating sequence of the
+  # current locale. Under en_US.UTF-8 the range a-f collates case-insensitively
+  # and admits uppercase, so a range would accept two spellings of one identity.
   case "$identity" in
-    sha256:????????????????????????????????????????????????????????????????) ;;
-    *)
-      echo "resource $resource has a malformed identity digest" >&2
-      exit 1
-      ;;
+    sha256:*) body=${identity#sha256:} ;;
+    *) body='' ;;
   esac
+  case "$body" in
+    *[!0123456789abcdef]*) body='' ;;
+  esac
+  if test "${#body}" -ne 64; then
+    echo "resource $resource has a malformed identity digest" >&2
+    exit 1
+  fi
   case "$identity" in
     *0000000000000000|*1111111111111111|*2222222222222222|*3333333333333333|\
     *4444444444444444|*5555555555555555|*6666666666666666|*7777777777777777|\
