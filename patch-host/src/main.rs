@@ -10,7 +10,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use warp_core::causal_wal::{
     FilesystemWalStore, Lsn, PayloadCodecId, PayloadSchemaId, WalDurabilityMode, WalSegmentId,
-    WalStorePort, WalTransactionId, WriterEpochId, WriterEpochRequest,
+    WalStorePort, WalTransactionId, WriterEpoch, WriterEpochId,
 };
 use warp_core::external_action::{
     claim_external_action, reconcile_external_action_settlement_retry,
@@ -229,12 +229,12 @@ fn request_phase(
     if invocation.argument.is_some() {
         return Err("request does not accept workspace authority".to_owned());
     }
-    let mut store = open_write_store(&invocation.wal_dir)?;
+    let (mut store, writer_epoch) = open_write_store(&invocation.wal_dir)?;
     let mut coordinator = recover(&store)?;
     record_external_action_request(
         &mut store,
         &mut coordinator,
-        transaction_context("request", admitted),
+        transaction_context("request", admitted, writer_epoch.epoch_id),
         admitted.request(),
     )
     .map_err(|error| format!("request admission failed: {error:?}"))?;
@@ -244,6 +244,7 @@ fn request_phase(
         admitted,
         &store,
         &coordinator,
+        Some(&writer_epoch),
     )
 }
 
@@ -255,7 +256,7 @@ fn claim_phase(
     if invocation.argument.is_some() {
         return Err("claim does not accept workspace authority".to_owned());
     }
-    let mut store = open_write_store(&invocation.wal_dir)?;
+    let (mut store, writer_epoch) = open_write_store(&invocation.wal_dir)?;
     let mut coordinator = recover(&store)?;
     let request = admitted.request();
     let recorded = coordinator
@@ -274,7 +275,7 @@ fn claim_phase(
     claim_external_action(
         &mut store,
         &mut coordinator,
-        transaction_context("claim", admitted),
+        transaction_context("claim", admitted, writer_epoch.epoch_id),
         recorded,
         authorization,
         request.basis_digest,
@@ -288,6 +289,7 @@ fn claim_phase(
         admitted,
         &store,
         &coordinator,
+        Some(&writer_epoch),
     )
 }
 
@@ -304,12 +306,14 @@ fn inspect_phase(
     }
     let store = open_read_store(&invocation.wal_dir)?;
     let coordinator = recover(&store)?;
+    // Read-only phases take no writer lease and acquire no epoch.
     print_report(
         &invocation.phase,
         request_case,
         admitted,
         &store,
         &coordinator,
+        None,
     )
 }
 
@@ -323,7 +327,7 @@ fn apply_phase(
         .as_ref()
         .map(Path::new)
         .ok_or_else(|| "apply requires a workspace root".to_owned())?;
-    let mut store = open_write_store(&invocation.wal_dir)?;
+    let (mut store, writer_epoch) = open_write_store(&invocation.wal_dir)?;
     let mut coordinator = recover(&store)?;
     let grant = coordinator
         .claim_grant(admitted.request().request_id())
@@ -341,7 +345,7 @@ fn apply_phase(
         .admit_settlement(
             &mut store,
             &mut coordinator,
-            transaction_context("settlement", admitted),
+            transaction_context("settlement", admitted, writer_epoch.epoch_id),
             admitted,
             grant,
             candidate,
@@ -353,6 +357,7 @@ fn apply_phase(
         admitted,
         &store,
         &coordinator,
+        Some(&writer_epoch),
     )
 }
 
@@ -366,7 +371,7 @@ fn reconcile_phase(
         .as_ref()
         .map(Path::new)
         .ok_or_else(|| "reconcile requires a workspace root".to_owned())?;
-    let mut store = open_write_store(&invocation.wal_dir)?;
+    let (mut store, writer_epoch) = open_write_store(&invocation.wal_dir)?;
     let mut coordinator = recover(&store)?;
     let grant = coordinator
         .claim_grant(admitted.request().request_id())
@@ -384,7 +389,7 @@ fn reconcile_phase(
         .admit_settlement(
             &mut store,
             &mut coordinator,
-            transaction_context("settlement", admitted),
+            transaction_context("settlement", admitted, writer_epoch.epoch_id),
             admitted,
             grant,
             candidate,
@@ -396,6 +401,7 @@ fn reconcile_phase(
         admitted,
         &store,
         &coordinator,
+        Some(&writer_epoch),
     )
 }
 
@@ -439,6 +445,7 @@ fn retry_phase(
                 admitted,
                 &store,
                 &coordinator,
+                None,
             )?;
             let mut report = report
                 .as_object()
@@ -465,6 +472,7 @@ fn retry_phase(
                 admitted,
                 &store,
                 &coordinator,
+                None,
             )?
             .as_object()
             .cloned()
@@ -492,8 +500,16 @@ fn print_report(
     admitted: &AdmittedEdictExternalActionRequestV1,
     store: &FilesystemWalStore,
     coordinator: &ExternalActionCoordinatorV1,
+    writer_epoch: Option<&WriterEpoch>,
 ) -> Result<(), String> {
-    print_json(&report(phase, request_case, admitted, store, coordinator)?)
+    print_json(&report(
+        phase,
+        request_case,
+        admitted,
+        store,
+        coordinator,
+        writer_epoch,
+    )?)
 }
 
 fn report(
@@ -502,6 +518,7 @@ fn report(
     admitted: &AdmittedEdictExternalActionRequestV1,
     store: &FilesystemWalStore,
     coordinator: &ExternalActionCoordinatorV1,
+    writer_epoch: Option<&WriterEpoch>,
 ) -> Result<Value, String> {
     let request = admitted.request();
     let recovered = coordinator
@@ -544,9 +561,24 @@ fn report(
         RecoveredExternalActionPostureV1::Claimed => "claimed",
         RecoveredExternalActionPostureV1::Settled(_) => "settled",
     };
+    let writer_epoch = writer_epoch.map(|epoch| {
+        json!({
+            "epochId": hex(&epoch.epoch_id.as_hash()),
+            "previousEpochId": epoch
+                .previous_epoch_id
+                .map(|previous| json!(hex(&previous.as_hash())))
+                .unwrap_or(Value::Null),
+            "previousEpochFinalCommitDigest": epoch
+                .previous_epoch_final_commit_digest
+                .map(|digest| json!(hex(&digest)))
+                .unwrap_or(Value::Null),
+            "startedAtLsn": epoch.started_at_lsn.as_u64()
+        })
+    });
     Ok(json!({
         "phase": phase,
         "requestId": hex(&request.request_id().as_hash()),
+        "writerEpoch": writer_epoch,
         "compiler": {
             "coreDigest": admitted.source_core_digest(),
             "targetIrDigest": admitted.target_ir_digest(),
@@ -657,21 +689,25 @@ fn adapter_profile(
     }
 }
 
-fn open_write_store(path: &Path) -> Result<FilesystemWalStore, String> {
+/// Opens the WAL for writing under a fresh, durably linked writer epoch.
+///
+/// Echo owns epoch derivation, predecessor linkage, and lease enforcement in
+/// `FilesystemWalStore::acquire_fresh_writer_epoch`: it takes the filesystem
+/// writer lease, rereads the persisted epoch ledger, closes an epoch left by a
+/// terminated process, and derives the successor from that predecessor's
+/// identity and final commit digest. Every host phase here is a separate
+/// process, so each phase acquires a new epoch chained to the persisted
+/// predecessor.
+///
+/// Hello Echo derives no epoch identity of its own and reuses no fencing
+/// token across restarts. A concurrently live writer keeps the lease and this
+/// call refuses rather than taking over.
+fn open_write_store(path: &Path) -> Result<(FilesystemWalStore, WriterEpoch), String> {
     let mut store = open_read_store(path)?;
-    store
-        .acquire_writer_epoch(WriterEpochRequest {
-            epoch_id: epoch_id(),
-            storage_fencing_token: digest("hello-effect-patch:fencing"),
-            process_identity: digest("hello-effect-patch:process"),
-            host_identity: digest("hello-effect-patch:host"),
-            started_at_lsn: Lsn::from_raw(0),
-            previous_epoch_id: None,
-            previous_epoch_final_commit_digest: None,
-            lease_or_lock_evidence: digest("hello-effect-patch:lease"),
-        })
+    let epoch = store
+        .acquire_fresh_writer_epoch(Lsn::from_raw(0))
         .map_err(|error| format!("writer epoch acquisition failed: {error:?}"))?;
-    Ok(store)
+    Ok((store, epoch))
 }
 
 fn open_read_store(path: &Path) -> Result<FilesystemWalStore, String> {
@@ -691,16 +727,13 @@ fn recover(store: &FilesystemWalStore) -> Result<ExternalActionCoordinatorV1, St
         .map_err(|error| format!("external-action recovery failed: {error:?}"))
 }
 
-fn epoch_id() -> WriterEpochId {
-    WriterEpochId::from_hash(digest("hello-effect-patch:epoch"))
-}
-
 fn transaction_context(
     phase: &str,
     admitted: &AdmittedEdictExternalActionRequestV1,
+    writer_epoch: WriterEpochId,
 ) -> ExternalActionTransactionContextV1 {
     ExternalActionTransactionContextV1 {
-        writer_epoch: epoch_id(),
+        writer_epoch,
         segment_id: SEGMENT_ID,
         transaction_id: WalTransactionId::from_hash(digest(&format!(
             "hello-effect-patch:{phase}:{}",
