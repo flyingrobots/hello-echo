@@ -43,5 +43,8 @@ assert_chained_writer_epoch() {
 # Read-only phases take no writer lease and therefore acquire no epoch.
 assert_no_writer_epoch() {
   report_file=$1
-  jq -e '.writerEpoch == null' "$report_file" >/dev/null
+  # jq reads a missing property as null, so requiring the field to be present
+  # keeps this an assertion about a reported absence rather than one satisfied
+  # by a host that stopped reporting.
+  jq -e 'has("writerEpoch") and .writerEpoch == null' "$report_file" >/dev/null
 }

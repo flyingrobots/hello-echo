@@ -95,6 +95,16 @@ mutate "predecessor final commit digest is well-formed but wrong" \
 mutate "epoch id is not a digest" \
   '.writerEpoch.epochId = "not-a-digest"'
 
+# jq reads a missing property as null, so an assertion written only as
+# "== null" also passes when the host stops emitting the field. A report that
+# omits the evidence entirely must fail rather than read as proof of absence.
+jq 'del(.writerEpoch)' "$work/inspect.json" >"$work/absent.json"
+if assert_no_writer_epoch "$work/absent.json" 2>/dev/null; then
+  echo 'FAIL assertion accepted: report omitting writerEpoch entirely' >&2
+  exit 1
+fi
+printf 'ok   rejected: report omitting writerEpoch entirely\n'
+
 # A read-only phase that acquired a lease would be a silent authority
 # escalation, so the null assertion must not accept a populated epoch.
 if assert_no_writer_epoch "$work/claim.json" 2>/dev/null; then
