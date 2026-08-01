@@ -142,7 +142,15 @@ bounded workspace adapter. It proves:
 - the exact settlement-size boundary succeeds and one byte less refuses; and
 - substituted compiler artifacts are rejected with the same typed obstruction
   at request and recovery boundaries without appending to the WAL, while
-  invalid runtime requests remain a distinct pre-commit refusal.
+  invalid runtime requests remain a distinct pre-commit refusal; and
+- every write phase runs under a fresh Echo-derived writer epoch chained to the
+  persisted predecessor, while read-only phases acquire no epoch.
+
+The request pins `workspace.snapshot.input@1`,
+`workspace.snapshot.settlement@1`, and `workspace.snapshot.reconcile@1` to the
+exact identities of vendored `edict.external-action-resource/v1` artifacts,
+supplied to the build through `externalActionResources`. An unresolved or
+sentinel schema identity fails the build closed.
 
 The fixed suite contains one ordered golden path, one relative
 compiler-artifact path probe, one idempotent retry, one conflicting retry, one
@@ -213,9 +221,25 @@ The runtime witness proves:
 - the exact request-only settlement floor passes and one byte less refuses
   before a WAL commit;
 - compiler-artifact substitution fails at request and claim boundaries
-  without hidden WAL growth; and
+  without hidden WAL growth;
+- every write phase runs under a fresh Echo-derived writer epoch chained to the
+  persisted predecessor, read-only phases acquire no epoch, and no epoch is
+  reused across the ordered path; and
 - fixed-seed text, Unicode, and binary replacements plus eight bounded stress
   worldlines pass.
+
+The request pins `workspace.patch.input@1`, `workspace.patch.settlement@1`, and
+`workspace.patch.reconcile@1` to the exact identities of vendored
+`edict.external-action-resource/v1` artifacts, supplied to the build through
+`externalActionResources`. An unresolved or sentinel schema identity fails the
+build closed.
+
+Writer-epoch fencing is producer-owned. Each host phase is a separate process,
+and it calls Echo's `FilesystemWalStore::acquire_fresh_writer_epoch`, which
+takes the filesystem writer lease, rereads the persisted epoch ledger, closes
+an epoch left by a terminated process, and derives the successor from that
+predecessor's identity and final commit digest. Hello Echo constructs no epoch
+identity and reuses no fencing token across restarts.
 
 The model-facing surface is data only. Edict owns the request declaration,
 Echo owns admission and durable coordination, and the adapter alone owns the

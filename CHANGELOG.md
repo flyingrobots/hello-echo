@@ -32,9 +32,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   replay, crash reconciliation, ambiguous outcomes, path and basis refusals,
   request-budget boundaries, compiler-artifact substitution, fixed-seed binary
   replacements, and bounded stress.
+- Writer-epoch chain evidence in the observation and patch reports, with
+  witness cases requiring a fresh epoch per write phase, exact predecessor and
+  final-commit-digest linkage, a strictly advancing start LSN, no epoch on
+  read-only phases, and no epoch reused across the ordered golden path.
+- Build refusal for unresolved or sentinel external-action schema identities in
+  the vendored compiler source.
 
 ### Changed
 
+- Advanced the vendored `workspace.patch@1` closure to Edict
+  `df80f92ad6242c6da31a64224666fd37aa43b0d0`, which replaces the sentinel
+  `workspace.patch.input@1`, `workspace.patch.settlement@1`, and
+  `workspace.patch.reconcile@1` digests with the exact identities of vendored
+  `edict.external-action-resource/v1` artifacts, now supplied to the build
+  through `externalActionResources`.
+- Acquire the patch host's writer epoch through Echo's
+  `FilesystemWalStore::acquire_fresh_writer_epoch` against Echo
+  `c354d531679861fb7bbd52ab7b7703807909ab86`, replacing the static epoch
+  identity, fixed fencing, process, host, and lease digests, and absent
+  predecessor linkage that could not fence overlapping or restarted hosts.
+- Advanced the vendored `workspace.snapshot@1` closure to the same Edict
+  commit, which likewise replaces its sentinel `workspace.snapshot.input@1`,
+  `workspace.snapshot.settlement@1`, and `workspace.snapshot.reconcile@1`
+  digests with vendored external-action resource identities, and acquire the
+  observation host's writer epoch through the same producer-owned fresh-epoch
+  contract.
 - Require the runtime witness to retain the exact Edict-authored
   `GreetingCreated { key, message }` result identity and canonical bytes through
   generic Echo evaluation and to compare the applied, fresh-host, and
