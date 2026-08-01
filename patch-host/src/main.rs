@@ -26,7 +26,8 @@ use warp_core::external_action_adapter::{
 use warp_core::validated_workspace_patch::{
     encode_validated_workspace_patch_input_v1, validated_workspace_patch_authority_v1,
     validated_workspace_patch_basis_v1, ValidatedWorkspacePatchAdapterV1,
-    ValidatedWorkspacePatchProfileV1, ValidatedWorkspacePatchReconcilerV1,
+    ValidatedWorkspacePatchErrorV1, ValidatedWorkspacePatchProfileV1,
+    ValidatedWorkspacePatchReconcilerV1,
 };
 use warp_core::{Hash, WorldlineId};
 
@@ -98,11 +99,17 @@ fn run() -> Result<(), String> {
 
     let application_input = match application_input(&request_case) {
         Ok(input) => input,
-        Err(_) => {
+        Err(refusal) => {
+            let obstruction = match refusal {
+                ApplicationInputRefusal::Malformed => "requestRejected",
+                ApplicationInputRefusal::ReplacementExceedsRequestBudget => {
+                    "replacementExceedsRequestBudget"
+                }
+            };
             let commit_count = wal_commit_count(&invocation.wal_dir)?;
             print_json(&json!({
                 "phase": invocation.phase,
-                "obstruction": "requestRejected",
+                "obstruction": obstruction,
                 "wal": {"commitCount": commit_count}
             }))?;
             std::process::exit(3);
@@ -171,23 +178,47 @@ fn parse_invocation() -> Result<Invocation, String> {
     Ok(invocation)
 }
 
-fn application_input(request_case: &RequestCase) -> Result<Vec<u8>, String> {
+/// Why a request could not be turned into an application input.
+///
+/// An over-budget replacement is kept distinct from a malformed one: the host
+/// accepts replacement sizes the encoded request cannot carry, and reporting
+/// both as the same obstruction would make a budget refusal indistinguishable
+/// from a bad request.
+enum ApplicationInputRefusal {
+    Malformed,
+    ReplacementExceedsRequestBudget,
+}
+
+fn application_input(request_case: &RequestCase) -> Result<Vec<u8>, ApplicationInputRefusal> {
     if request_case.proposal.path != request_case.observation.path {
-        return Err("proposal path did not match the witnessed observation path".to_owned());
+        return Err(ApplicationInputRefusal::Malformed);
     }
-    let before = decode_hex(&request_case.observation.bytes_hex)?;
-    let replacement = decode_hex(&request_case.proposal.replacement_bytes_hex)?;
+    let before = decode_hex(&request_case.observation.bytes_hex)
+        .map_err(|_| ApplicationInputRefusal::Malformed)?;
+    let replacement = decode_hex(&request_case.proposal.replacement_bytes_hex)
+        .map_err(|_| ApplicationInputRefusal::Malformed)?;
     let max_file_bytes =
-        usize::try_from(MAX_FILE_BYTES_V1).map_err(|_| "file budget was not representable")?;
+        usize::try_from(MAX_FILE_BYTES_V1).map_err(|_| ApplicationInputRefusal::Malformed)?;
     if before.len() > max_file_bytes || replacement.len() > max_file_bytes {
-        return Err("patch data exceeded the host file budget".to_owned());
+        return Err(ApplicationInputRefusal::ReplacementExceedsRequestBudget);
     }
     let patch = encode_validated_workspace_patch_input_v1(
         request_case.proposal.path.clone(),
         blake3::hash(&before).into(),
         replacement,
     )
-    .map_err(|error| format!("validated patch encoding failed: {error:?}"))?;
+    .map_err(|error| match error {
+        // The encoder holds the carrier bound. The encoded patch carries the
+        // path and expected content digest alongside the replacement bytes, so
+        // the reachable replacement size is smaller than the host's raw file
+        // cap and shrinks as the path grows. Only the producer knows the exact
+        // framing cost, so its budget refusal is surfaced rather than
+        // re-derived here.
+        ValidatedWorkspacePatchErrorV1::FileBudgetExceeded => {
+            ApplicationInputRefusal::ReplacementExceedsRequestBudget
+        }
+        _ => ApplicationInputRefusal::Malformed,
+    })?;
     let authority = validated_workspace_patch_authority_v1(
         request_case.permitted_paths.iter().map(String::as_str),
     );
@@ -202,7 +233,7 @@ fn application_input(request_case: &RequestCase) -> Result<Vec<u8>, String> {
         ),
         ("maxAttempts", CanonicalValueV1::Integer(1)),
     ]))
-    .map_err(|error| format!("application input encoding failed: {error:?}"))
+    .map_err(|_| ApplicationInputRefusal::Malformed)
 }
 
 fn is_compiler_artifact_rejection(error: &EdictExternalActionAdmissionErrorV1) -> bool {

@@ -48,6 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   writer-epoch assertions against crafted closures and mutated reports. Both
   require no producer checkout and no `cargo`.
 
+- `replacementExceedsRequestBudget` as a distinct request obstruction, with a
+  witness case covering a replacement above the encodable ceiling.
+
 ### Changed
 
 - Advanced the vendored `workspace.patch@1` closure to Edict

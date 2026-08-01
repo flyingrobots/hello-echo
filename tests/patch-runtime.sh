@@ -507,6 +507,42 @@ jq -e '
   and .wal.commitCount == 0
 ' "$malformed_root/request-report.json" >/dev/null
 
+# Replacement-size boundary. The host advertises a 65,536-byte file cap, but
+# the encoded patch carries the path, the expected content digest, and canonical
+# framing inside the same bounded request carrier, so the reachable replacement
+# size is smaller and depends on the path. A replacement the host accepts must
+# either be admitted or refused for a stated reason, never accepted here and
+# then rejected as an indistinguishable malformed request.
+oversize_root="$patch_root/oversize-replacement"
+mkdir -p "$oversize_root/workspace/notes"
+printf 'hello' >"$oversize_root/workspace/notes/big.txt"
+oversize_hex=$(
+  awk 'BEGIN { while (i++ < 65536) printf "41" }'
+)
+make_case \
+  "$oversize_root/request.json" \
+  93 \
+  notes/big.txt \
+  "$(hex_bytes hello)" \
+  "$oversize_hex" \
+  notes/big.txt \
+  65536
+if run_phase \
+  request \
+  "$oversize_root/request.json" \
+  "$oversize_root/wal" \
+  "$oversize_root/report.json"
+then
+  echo "a replacement above the encodable ceiling was admitted" >&2
+  exit 1
+fi
+# The refusal must name the budget, not masquerade as a malformed request.
+jq -e '
+  .phase == "request"
+  and .obstruction == "replacementExceedsRequestBudget"
+  and .wal.commitCount == 0
+' "$oversize_root/report.json" >/dev/null
+
 # Settlement-size boundary: the request-only settlement floor (the encoded
 # result size, never below the host minimum) succeeds; one byte less refuses
 # before mutation.

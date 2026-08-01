@@ -189,6 +189,15 @@ package.
 The request JSON separates untrusted `proposal` data from the declared
 `observation` basis. The host owns `permittedPaths` and the adapter's
 65,536-byte file cap; the model controls only the closed `proposal` schema.
+
+That 65,536-byte cap bounds the file, not the replacement. The encoded patch
+carries the target path and the expected content digest inside the same bounded
+request carrier, so the largest accepted replacement is smaller than the cap and
+shrinks as the path grows: roughly 65,366 bytes for `a.txt` and 65,313 for a
+57-character path. The host does not guess that overhead. It surfaces the
+compiler's own budget refusal as `replacementExceedsRequestBudget`, so a
+replacement that cannot be carried is refused for a stated reason rather than
+reported as a malformed request.
 The host uses Echo's generic validated-patch encoder and authority functions;
 it does not reconstruct patch policy or perform native application semantics.
 The observation is also a closed schema. Echo durably records the request and
@@ -220,6 +229,9 @@ The runtime witness proves:
   policy failures obstruct before mutation;
 - the exact request-only settlement floor passes and one byte less refuses
   before a WAL commit;
+- a replacement too large for the compiler-declared request carrier refuses as
+  `replacementExceedsRequestBudget` before a WAL commit, distinct from a
+  malformed request;
 - compiler-artifact substitution fails at request and claim boundaries
   without hidden WAL growth;
 - every write phase runs under a fresh Echo-derived writer epoch chained to the
