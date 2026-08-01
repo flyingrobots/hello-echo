@@ -32,36 +32,11 @@ jobs:
             printf 'echo_commit=%s\n' "$(jq -r '.echo.commit' producers.lock.json)"
           } >>"$GITHUB_OUTPUT"
 
-      - name: Require a producer read token
-        env:
-          PRODUCER_READ_TOKEN: ${{ secrets.PRODUCER_READ_TOKEN }}
-        run: |
-          set -eu
-          if test -z "${PRODUCER_READ_TOKEN:-}"; then
-            cat >&2 <<'MESSAGE'
-          The PRODUCER_READ_TOKEN secret is not set.
-
-          Edict and Echo are private, so this workflow needs a token with read
-          access to both in order to check them out at the pinned commits.
-          Without it the witnesses cannot run, which is a failure rather than
-          something to skip past: a proof repository whose proofs do not
-          execute proves nothing.
-
-          Create a fine-grained personal access token with Contents: Read on
-          flyingrobots/edict and flyingrobots/echo, then add it as the
-          repository secret PRODUCER_READ_TOKEN.
-          MESSAGE
-            exit 1
-          fi
-
-      # The producer repositories are private, so a token with read access to
-      # them is required.
       - name: Check out Edict at the pinned commit
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           repository: ${{ steps.producers.outputs.edict_repo }}
           ref: ${{ steps.producers.outputs.edict_commit }}
-          token: ${{ secrets.PRODUCER_READ_TOKEN }}
           path: .producers/edict
 
       - name: Check out Echo at the pinned commit
@@ -69,7 +44,6 @@ jobs:
         with:
           repository: ${{ steps.producers.outputs.echo_repo }}
           ref: ${{ steps.producers.outputs.echo_commit }}
-          token: ${{ secrets.PRODUCER_READ_TOKEN }}
           path: .producers/echo
 
       - name: Install the Rust toolchain
