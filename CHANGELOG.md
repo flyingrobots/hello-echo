@@ -70,6 +70,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   commits, and runs the complete witness gate plus shell syntax, formatting,
   and strict clippy on pull requests and pushes to `main`.
 
+- Absolute symlink targets in the relative-producer-path probe. The probe
+  linked the producer checkout as given, so a relative producer path produced a
+  dangling link rather than a relative path, and the observation witness failed
+  before it began. It worked only because every caller had passed absolute
+  paths until CI existed.
+
 ### Removed
 
 - `tests/lib/check-resource-identities.sh` and

@@ -24,10 +24,16 @@ mkdir -p "$effect_root"
 # Producer checkout paths may be relative at the public shell boundary. The
 # generated Cargo manifest must contain their canonical targets, not paths that
 # Cargo would reinterpret relative to the nested build directory.
+#
+# The link path is deliberately relative, because that is what this probe
+# exercises. The link target must be absolute: a symlink target is resolved
+# against the directory holding the link, so linking a relative producer path
+# from a nested build directory produces a dangling link rather than a
+# relative producer path.
 relative_repo_links="$effect_root/relative-repos"
 mkdir -p "$relative_repo_links"
-ln -s "$EDICT_REPO" "$relative_repo_links/edict"
-ln -s "$ECHO_REPO" "$relative_repo_links/echo"
+ln -s "$(CDPATH='' cd -- "$EDICT_REPO" && pwd -P)" "$relative_repo_links/edict"
+ln -s "$(CDPATH='' cd -- "$ECHO_REPO" && pwd -P)" "$relative_repo_links/echo"
 EDICT_REPO="$relative_repo_links/edict" \
 ECHO_REPO="$relative_repo_links/echo" \
 ./tests/effect-build.sh
