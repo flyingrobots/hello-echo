@@ -26,9 +26,23 @@ basis-bound patch application, Graft hosting, Git and GitHub adapters, and the
 self-hosted delivery loop. The delivery loop is Roadmap Ω, not Hello Echo's
 bootstrap workload.
 
+## Producer pin
+
+`producers.lock.json` records the exact Edict and Echo commits this repository
+is proven against. Every build boundary calls `tests/producer-lock.sh` first
+and refuses a checkout that is not those commits, or that has uncommitted
+changes, so a stale or locally modified producer fails loudly instead of
+producing a misleading result. A commit id alone would not catch the second
+case: edits to the producer leave `rev-parse` reporting the pinned commit while
+the build compiles different sources. CI reads the same file and
+checks the producers out at those commits.
+
+Advancing a producer means changing that file in the same commit as the
+re-vendored artifacts it implies.
+
 ## Local build
 
-Set `EDICT_REPO` and `ECHO_REPO` to compatible local checkouts, then run:
+Set `EDICT_REPO` and `ECHO_REPO` to checkouts at the pinned commits, then run:
 
 ```sh
 EDICT_REPO=/path/to/edict \
@@ -139,10 +153,18 @@ bounded workspace adapter. It proves:
   post-claim aperture substitution cannot recover the claim;
 - unauthorized, parent-escaped, symlink, and stale-basis paths settle as typed
   refusals;
-- the exact settlement-size boundary succeeds and one byte less refuses; and
+- the exact settlement-size boundary succeeds and one byte less refuses;
 - substituted compiler artifacts are rejected with the same typed obstruction
   at request and recovery boundaries without appending to the WAL, while
-  invalid runtime requests remain a distinct pre-commit refusal.
+  invalid runtime requests remain a distinct pre-commit refusal; and
+- every write phase runs under a fresh Echo-derived writer epoch chained to the
+  persisted predecessor, while read-only phases acquire no epoch.
+
+The request pins `workspace.snapshot.input@1`,
+`workspace.snapshot.settlement@1`, and `workspace.snapshot.reconcile@1` to the
+exact identities of vendored `edict.external-action-resource/v1` artifacts,
+supplied to the build through `externalActionResources`. Edict validates that
+closure; Hello Echo corroborates the artifacts and invokes the validator.
 
 The fixed suite contains one ordered golden path, one relative
 compiler-artifact path probe, one idempotent retry, one conflicting retry, one
@@ -160,3 +182,112 @@ process, network, or model authority and introduces no application callback.
 
 No artifact in this repository may be replaced by a handwritten Echo package,
 and no native Hello Echo callback may implement application semantics.
+
+## Hello Effect validated patch application
+
+The second external-effect proof accepts bounded observation evidence as basis
+input and applies one compiler-authored validated patch:
+
+```sh
+EDICT_REPO=/path/to/edict \
+ECHO_REPO=/path/to/echo \
+./tests/patch-runtime.sh
+```
+
+This witness needs `b3sum` and `xxd` in addition to `jq`. It compares the content digests
+the settlement reports against digests computed from the witnessed bytes, so it
+must hash them the same way the adapter does.
+
+The build corroborates the exact Edict source, lawpack closure, digest
+sidecars, Core artifact, and Target IR artifact for
+`workspace.patch.applyValidated@1`. Edict emits request data only. The compiler
+provider receives no filesystem authority and emits no executable-operation
+package.
+
+The request JSON separates untrusted `proposal` data from the declared
+`observation` basis. The host owns `permittedPaths` and the adapter's
+65,536-byte file cap; the model controls only the closed `proposal` schema.
+
+That 65,536-byte cap bounds the file, not the replacement. The encoded patch
+carries the target path and the expected content digest inside the same bounded
+request carrier, so the largest accepted replacement is smaller than the cap and
+shrinks as the path grows.
+
+The budget is producer-owned. Echo's `encode_validated_workspace_patch_input_v1`
+refuses with `FileBudgetExceeded` once the canonical encoding passes
+`MAX_CANONICAL_PATCH_INPUT_BYTES`, and Hello Echo surfaces that as
+`replacementExceedsRequestBudget` rather than deriving a ceiling of its own. A
+replacement that cannot be carried is therefore refused for a stated reason
+instead of being reported as a malformed request.
+
+The reachable size follows from that bound minus the canonical framing, so it is
+not a constant this repository can pin. Measured against Echo
+`c354d531679861fb7bbd52ab7b7703807909ab86`, it was 65,366 bytes for `a.txt`,
+65,360 for `notes/x.txt`, and 65,313 for a 57-character path. Those figures
+illustrate the shape of the bound; they are not a contract, and they move with
+the producer's encoding. Nothing in this repository depends on them, and
+`tests/patch-runtime.sh` probes the refusal rather than any particular
+threshold.
+The host uses Echo's generic validated-patch encoder and authority functions;
+it does not reconstruct patch policy or perform native application semantics.
+The observation is also a closed schema. Echo durably records the request and
+claim before only the bounded adapter receives a workspace root.
+
+This witness proves the basis-bound write boundary independently. It does not
+claim that the observation and patch run share one chained transaction or
+worldline.
+
+The runtime witness proves:
+
+- request and claim commit before mutation, across separate processes;
+- recovery exposes pending requested and claimed states without workspace
+  authority;
+- the adapter can mutate only an exact permitted path under the admitted
+  observation basis;
+- the canonical settlement commits before the result is reported, and the
+  report cross-compares its attempt, request basis, external evidence,
+  postcondition digest, and resulting basis;
+- exact retry is effect-free and conflicting retry obstructs without WAL
+  growth;
+- replay accepts no workspace root and does not reapply a settled patch after
+  the file changes again;
+- a crash after mutation but before settlement reconciles from the observed
+  postcondition without inventing pre-state evidence;
+- an ambiguous postcondition settles as `outcomeUnknown` without another
+  mutation;
+- stale basis, unauthorized path, parent escape, symlink, and CI-workflow
+  policy failures obstruct before mutation;
+- the exact request-only settlement floor passes and one byte less refuses
+  before a WAL commit;
+- a replacement too large for the compiler-declared request carrier refuses as
+  `replacementExceedsRequestBudget` before a WAL commit, and a declared
+  pre-state above the host file budget refuses as
+  `observationExceedsFileBudget`, both distinct from a malformed request and
+  from each other;
+- compiler-artifact substitution fails at request and claim boundaries
+  without hidden WAL growth;
+- every write phase runs under a fresh Echo-derived writer epoch chained to the
+  persisted predecessor, read-only phases acquire no epoch, and no epoch is
+  reused across the ordered path; and
+- fixed-seed text, Unicode, and binary replacements plus eight bounded stress
+  worldlines pass.
+
+The request pins `workspace.patch.input@1`, `workspace.patch.settlement@1`, and
+`workspace.patch.reconcile@1` to the exact identities of vendored
+`edict.external-action-resource/v1` artifacts, supplied to the build through
+`externalActionResources`. Edict recomputes and validates the complete closure
+and refuses a malformed, missing, substituted, or unresolved resource. Hello
+Echo corroborates those artifacts byte-for-byte and invokes that validator; it
+does not reparse Edict source.
+
+Writer-epoch fencing is producer-owned. Each host phase is a separate process,
+and it calls Echo's `FilesystemWalStore::acquire_fresh_writer_epoch`, which
+takes the filesystem writer lease, rereads the persisted epoch ledger, closes
+an epoch left by a terminated process, and derives the successor from that
+predecessor's identity and final commit digest. Hello Echo constructs no epoch
+identity and reuses no fencing token across restarts.
+
+The model-facing surface is data only. Edict owns the request declaration,
+Echo owns admission and durable coordination, and the adapter alone owns the
+bounded write. No generic filesystem write, process, network, Git, or model
+authority is introduced.

@@ -14,36 +14,47 @@ use warp_core::causal_wal::{
 };
 use warp_core::external_action::{
     claim_external_action, reconcile_external_action_settlement_retry,
-    record_external_action_request, ExternalActionAdapterIdV1, ExternalActionAdapterRegistryV1,
-    ExternalActionCoordinatorV1, ExternalActionSettlementCandidateV1,
-    ExternalActionSettlementKindV1, ExternalActionTransactionContextV1,
-    RecoveredExternalActionPostureV1,
+    record_external_action_request, ExternalActionAdapterBindingV1, ExternalActionAdapterIdV1,
+    ExternalActionAdapterRegistryV1, ExternalActionCoordinatorV1, ExternalActionProtocolErrorV1,
+    ExternalActionSettlementCandidateV1, ExternalActionSettlementKindV1,
+    ExternalActionTransactionContextV1, RecoveredExternalActionPostureV1,
 };
 use warp_core::external_action_adapter::{
-    admit_edict_external_action_request_v1, bounded_workspace_observation_basis_v1,
-    encode_bounded_workspace_observation_input_v1, AdmittedEdictExternalActionRequestV1,
-    BoundedWorkspaceObservationAdapterV1, BoundedWorkspaceObservationProfileV1,
-    BoundedWorkspaceObservationReconcilerV1, EdictExternalActionAdmissionErrorV1,
+    admit_edict_external_action_request_v1, AdmittedEdictExternalActionRequestV1,
+    EdictExternalActionAdmissionErrorV1,
+};
+use warp_core::validated_workspace_patch::{
+    encode_validated_workspace_patch_input_v1, validated_workspace_patch_authority_v1,
+    validated_workspace_patch_basis_v1, ValidatedWorkspacePatchAdapterV1,
+    ValidatedWorkspacePatchErrorV1, ValidatedWorkspacePatchProfileV1,
+    ValidatedWorkspacePatchReconcilerV1,
 };
 use warp_core::{Hash, WorldlineId};
 
 const SEGMENT_ID: WalSegmentId = WalSegmentId::from_raw(1);
+const MAX_FILE_BYTES_V1: u64 = 65_536;
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct RequestCase {
     worldline_byte: u8,
     intent: String,
-    scope: String,
-    requested_paths: Vec<String>,
-    expected_files: Vec<ExpectedFile>,
+    proposal: PatchProposal,
+    observation: WorkspaceObservation,
     permitted_paths: Vec<String>,
     max_settlement_bytes: u64,
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ExpectedFile {
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct PatchProposal {
+    path: String,
+    replacement_bytes_hex: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct WorkspaceObservation {
     path: String,
     bytes_hex: String,
 }
@@ -69,15 +80,44 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let invocation = parse_invocation()?;
-    let request_case: RequestCase = serde_json::from_slice(
-        &fs::read(&invocation.request_file).map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())?;
+    let request_bytes = fs::read(&invocation.request_file).map_err(|error| error.to_string())?;
+    let request_case: RequestCase = match serde_json::from_slice(&request_bytes) {
+        Ok(request_case) => request_case,
+        Err(_) => {
+            let commit_count = wal_commit_count(&invocation.wal_dir)?;
+            print_json(&json!({
+                "phase": invocation.phase,
+                "obstruction": "requestRejected",
+                "wal": {"commitCount": commit_count}
+            }))?;
+            std::process::exit(3);
+        }
+    };
     let core_bytes = fs::read(&invocation.core_file).map_err(|error| error.to_string())?;
     let target_ir_bytes =
         fs::read(&invocation.target_ir_file).map_err(|error| error.to_string())?;
 
-    let application_input = application_input(&request_case)?;
+    let application_input = match application_input(&request_case) {
+        Ok(input) => input,
+        Err(refusal) => {
+            let obstruction = match refusal {
+                ApplicationInputRefusal::Malformed => "requestRejected",
+                ApplicationInputRefusal::ObservationExceedsFileBudget => {
+                    "observationExceedsFileBudget"
+                }
+                ApplicationInputRefusal::ReplacementExceedsRequestBudget => {
+                    "replacementExceedsRequestBudget"
+                }
+            };
+            let commit_count = wal_commit_count(&invocation.wal_dir)?;
+            print_json(&json!({
+                "phase": invocation.phase,
+                "obstruction": obstruction,
+                "wal": {"commitCount": commit_count}
+            }))?;
+            std::process::exit(3);
+        }
+    };
     let admitted = match admit_edict_external_action_request_v1(
         WorldlineId::from_bytes([request_case.worldline_byte; 32]),
         &core_bytes,
@@ -106,8 +146,8 @@ fn run() -> Result<(), String> {
         "request" => request_phase(&invocation, &request_case, &admitted),
         "claim" => claim_phase(&invocation, &request_case, &admitted),
         "inspect" | "replay" => inspect_phase(&invocation, &request_case, &admitted),
-        "settle" => settlement_phase(&invocation, &request_case, &admitted),
-        "unknown" => uncertainty_phase(&invocation, &request_case, &admitted),
+        "apply" => apply_phase(&invocation, &request_case, &admitted),
+        "reconcile" => reconcile_phase(&invocation, &request_case, &admitted),
         "retry" => retry_phase(&invocation, &request_case, &admitted),
         phase => Err(format!("unsupported phase: {phase}")),
     }
@@ -141,55 +181,77 @@ fn parse_invocation() -> Result<Invocation, String> {
     Ok(invocation)
 }
 
-fn application_input(request_case: &RequestCase) -> Result<Vec<u8>, String> {
-    let operation_input =
-        encode_bounded_workspace_observation_input_v1(request_case.requested_paths.clone())
-            .map_err(|error| format!("operation input encoding failed: {error:?}"))?;
+/// Why a request could not be turned into an application input.
+///
+/// Budget refusals are kept distinct from malformed ones, and from each other:
+/// the host accepts replacement sizes the encoded request cannot carry, and
+/// the observation and the replacement are separate inputs. Reporting them
+/// under one obstruction would make a budget refusal indistinguishable from a
+/// bad request, or name the wrong input.
+enum ApplicationInputRefusal {
+    Malformed,
+    /// The declared pre-state does not fit the host file budget.
+    ObservationExceedsFileBudget,
+    /// The proposal was well formed, but its encoded patch does not fit the
+    /// compiler-declared request carrier.
+    ReplacementExceedsRequestBudget,
+}
+
+fn application_input(request_case: &RequestCase) -> Result<Vec<u8>, ApplicationInputRefusal> {
+    if request_case.proposal.path != request_case.observation.path {
+        return Err(ApplicationInputRefusal::Malformed);
+    }
+    let before = decode_hex(&request_case.observation.bytes_hex)
+        .map_err(|_| ApplicationInputRefusal::Malformed)?;
+    let replacement = decode_hex(&request_case.proposal.replacement_bytes_hex)
+        .map_err(|_| ApplicationInputRefusal::Malformed)?;
+    let max_file_bytes =
+        usize::try_from(MAX_FILE_BYTES_V1).map_err(|_| ApplicationInputRefusal::Malformed)?;
+    // The observation and the replacement are separate inputs with separate
+    // faults. Collapsing them would report an oversized pre-state as a
+    // replacement-budget refusal and name the wrong input.
+    //
+    // The observation is checked first, so an input oversized in both reports
+    // observationExceedsFileBudget. tests/patch-runtime.sh pins that
+    // obstruction, so reordering these two checks would retarget it.
+    if before.len() > max_file_bytes {
+        return Err(ApplicationInputRefusal::ObservationExceedsFileBudget);
+    }
+    if replacement.len() > max_file_bytes {
+        return Err(ApplicationInputRefusal::ReplacementExceedsRequestBudget);
+    }
+    let patch = encode_validated_workspace_patch_input_v1(
+        request_case.proposal.path.clone(),
+        blake3::hash(&before).into(),
+        replacement,
+    )
+    .map_err(|error| match error {
+        // The encoder holds the carrier bound. The encoded patch carries the
+        // path and expected content digest alongside the replacement bytes, so
+        // the reachable replacement size is smaller than the host's raw file
+        // cap and shrinks as the path grows. Only the producer knows the exact
+        // framing cost, so its budget refusal is surfaced rather than
+        // re-derived here.
+        ValidatedWorkspacePatchErrorV1::FileBudgetExceeded => {
+            ApplicationInputRefusal::ReplacementExceedsRequestBudget
+        }
+        _ => ApplicationInputRefusal::Malformed,
+    })?;
+    let authority = validated_workspace_patch_authority_v1(
+        request_case.permitted_paths.iter().map(String::as_str),
+    );
+    let basis = validated_workspace_patch_basis_v1(&request_case.proposal.path, &before);
     encode_canonical_cbor_v1(&canonical_map([
-        ("payload", CanonicalValueV1::Bytes(operation_input)),
-        (
-            "scope",
-            CanonicalValueV1::Bytes(authority_scope(request_case).to_vec()),
-        ),
-        (
-            "basis",
-            CanonicalValueV1::Bytes(expected_basis(request_case)?.to_vec()),
-        ),
+        ("patch", CanonicalValueV1::Bytes(patch)),
+        ("authority", CanonicalValueV1::Bytes(authority.to_vec())),
+        ("basis", CanonicalValueV1::Bytes(basis.to_vec())),
         (
             "maxSettlementBytes",
             CanonicalValueV1::Integer(i128::from(request_case.max_settlement_bytes)),
         ),
         ("maxAttempts", CanonicalValueV1::Integer(1)),
     ]))
-    .map_err(|error| format!("application input encoding failed: {error:?}"))
-}
-
-fn authority_scope(request_case: &RequestCase) -> Hash {
-    let mut permitted_paths = request_case
-        .permitted_paths
-        .iter()
-        .map(String::as_str)
-        .collect::<Vec<_>>();
-    permitted_paths.sort_unstable();
-    permitted_paths.dedup();
-
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(b"hello-effect:authority-scope:v1\0");
-    hash_length_delimited(&mut hasher, request_case.scope.as_bytes());
-    hasher.update(
-        &u64::try_from(permitted_paths.len())
-            .unwrap_or(u64::MAX)
-            .to_le_bytes(),
-    );
-    for path in permitted_paths {
-        hash_length_delimited(&mut hasher, path.as_bytes());
-    }
-    hasher.finalize().into()
-}
-
-fn hash_length_delimited(hasher: &mut blake3::Hasher, bytes: &[u8]) {
-    hasher.update(&u64::try_from(bytes.len()).unwrap_or(u64::MAX).to_le_bytes());
-    hasher.update(bytes);
+    .map_err(|_| ApplicationInputRefusal::Malformed)
 }
 
 fn is_compiler_artifact_rejection(error: &EdictExternalActionAdmissionErrorV1) -> bool {
@@ -208,22 +270,14 @@ fn is_compiler_artifact_rejection(error: &EdictExternalActionAdmissionErrorV1) -
     )
 }
 
-fn expected_basis(request_case: &RequestCase) -> Result<Hash, String> {
-    let files = request_case
-        .expected_files
-        .iter()
-        .map(|file| decode_hex(&file.bytes_hex).map(|bytes| (file.path.as_str(), bytes)))
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(bounded_workspace_observation_basis_v1(
-        files.iter().map(|(path, bytes)| (*path, bytes.as_slice())),
-    ))
-}
-
 fn request_phase(
     invocation: &Invocation,
     request_case: &RequestCase,
     admitted: &AdmittedEdictExternalActionRequestV1,
 ) -> Result<(), String> {
+    if invocation.argument.is_some() {
+        return Err("request does not accept workspace authority".to_owned());
+    }
     let (mut store, writer_epoch) = open_write_store(&invocation.wal_dir)?;
     let mut coordinator = recover(&store)?;
     record_external_action_request(
@@ -248,15 +302,21 @@ fn claim_phase(
     request_case: &RequestCase,
     admitted: &AdmittedEdictExternalActionRequestV1,
 ) -> Result<(), String> {
+    if invocation.argument.is_some() {
+        return Err("claim does not accept workspace authority".to_owned());
+    }
     let (mut store, writer_epoch) = open_write_store(&invocation.wal_dir)?;
     let mut coordinator = recover(&store)?;
     let request = admitted.request();
     let recorded = coordinator
         .recorded_request(request.request_id())
         .map_err(|error| format!("request recovery failed: {error:?}"))?;
-    let reconciler = BoundedWorkspaceObservationReconcilerV1::new(adapter_profile(admitted))
-        .map_err(|error| format!("adapter profile admission failed: {error:?}"))?;
-    let binding = reconciler.adapter_binding();
+    let profile = adapter_profile(admitted);
+    let binding = ExternalActionAdapterBindingV1 {
+        adapter_id: profile.adapter_id,
+        operation_id: profile.operation_id,
+        authority_scope_digest: profile.authority_scope_digest,
+    };
     let registry = ExternalActionAdapterRegistryV1::new([binding]);
     let authorization = registry
         .authorize(&request, binding.adapter_id)
@@ -269,7 +329,7 @@ fn claim_phase(
         authorization,
         request.basis_digest,
         0,
-        digest("hello-effect:adapter-lease"),
+        digest("hello-effect-patch:adapter-lease"),
     )
     .map_err(|error| format!("claim admission failed: {error:?}"))?;
     print_report(
@@ -289,24 +349,24 @@ fn inspect_phase(
 ) -> Result<(), String> {
     if invocation.argument.is_some() {
         return Err(format!(
-            "{} does not accept external-world authority",
+            "{} does not accept workspace authority",
             invocation.phase
         ));
     }
     let store = open_read_store(&invocation.wal_dir)?;
     let coordinator = recover(&store)?;
+    // Read-only phases take no writer lease and acquire no epoch.
     print_report(
         &invocation.phase,
         request_case,
         admitted,
         &store,
         &coordinator,
-        // Read-only phases take no writer lease and acquire no epoch.
         None,
     )
 }
 
-fn settlement_phase(
+fn apply_phase(
     invocation: &Invocation,
     request_case: &RequestCase,
     admitted: &AdmittedEdictExternalActionRequestV1,
@@ -315,21 +375,21 @@ fn settlement_phase(
         .argument
         .as_ref()
         .map(Path::new)
-        .ok_or_else(|| format!("{} requires a workspace root", invocation.phase))?;
+        .ok_or_else(|| "apply requires a workspace root".to_owned())?;
     let (mut store, writer_epoch) = open_write_store(&invocation.wal_dir)?;
     let mut coordinator = recover(&store)?;
     let grant = coordinator
         .claim_grant(admitted.request().request_id())
         .map_err(|error| format!("claim recovery failed: {error:?}"))?;
-    let adapter = BoundedWorkspaceObservationAdapterV1::open(
+    let adapter = ValidatedWorkspacePatchAdapterV1::open(
         workspace_root,
         request_case.permitted_paths.clone(),
         adapter_profile(admitted),
     )
     .map_err(|error| format!("adapter open failed: {error:?}"))?;
     let candidate = adapter
-        .observe(&grant, admitted)
-        .map_err(|error| format!("bounded observation failed: {error:?}"))?;
+        .apply(&grant, admitted)
+        .map_err(|error| format!("validated patch application failed: {error:?}"))?;
     adapter
         .admit_settlement(
             &mut store,
@@ -350,31 +410,40 @@ fn settlement_phase(
     )
 }
 
-fn uncertainty_phase(
+fn reconcile_phase(
     invocation: &Invocation,
     request_case: &RequestCase,
     admitted: &AdmittedEdictExternalActionRequestV1,
 ) -> Result<(), String> {
-    if invocation.argument.is_some() {
-        return Err("unknown does not accept external-world authority".to_owned());
-    }
+    let workspace_root = invocation
+        .argument
+        .as_ref()
+        .map(Path::new)
+        .ok_or_else(|| "reconcile requires a workspace root".to_owned())?;
     let (mut store, writer_epoch) = open_write_store(&invocation.wal_dir)?;
     let mut coordinator = recover(&store)?;
     let grant = coordinator
         .claim_grant(admitted.request().request_id())
         .map_err(|error| format!("claim recovery failed: {error:?}"))?;
-    let reconciler = BoundedWorkspaceObservationReconcilerV1::new(adapter_profile(admitted))
-        .map_err(|error| format!("reconciler admission failed: {error:?}"))?;
+    let reconciler = ValidatedWorkspacePatchReconcilerV1::open(
+        workspace_root,
+        request_case.permitted_paths.clone(),
+        adapter_profile(admitted),
+    )
+    .map_err(|error| format!("reconciler open failed: {error:?}"))?;
+    let candidate = reconciler
+        .reconcile(&grant, admitted)
+        .map_err(|error| format!("patch reconciliation failed: {error:?}"))?;
     reconciler
-        .admit_outcome_unknown(
+        .admit_settlement(
             &mut store,
             &mut coordinator,
             transaction_context("settlement", admitted, writer_epoch.epoch_id),
             admitted,
             grant,
-            digest("hello-effect:outcome-unknown-evidence"),
+            candidate,
         )
-        .map_err(|error| format!("unknown outcome admission failed: {error:?}"))?;
+        .map_err(|error| format!("reconciled settlement admission failed: {error:?}"))?;
     print_report(
         &invocation.phase,
         request_case,
@@ -445,7 +514,13 @@ fn retry_phase(
             );
             print_json(&Value::Object(report))
         }
-        Err(_) if retry_mode == "conflict-kind" => {
+        // Only a conflict may report a conflict. A wildcard would let an
+        // internal validation or recovery regression satisfy the witness case
+        // that is meant to prove the kind-only mutation was rejected for
+        // conflicting with the retained settlement.
+        Err(ExternalActionProtocolErrorV1::ConflictingSettlement)
+            if retry_mode == "conflict-kind" =>
+        {
             let mut report = report(
                 &invocation.phase,
                 request_case,
@@ -510,16 +585,22 @@ fn report(
         .settlement
         .as_ref()
         .map(|settlement| {
-            let observation = decode_observation(&settlement.canonical_result_bytes)?;
+            let patch = decode_patch_settlement(&settlement.canonical_result_bytes)?;
             let commit_digest = recovered
                 .settlement_commit_digest
                 .ok_or_else(|| "settlement commit digest absent".to_owned())?;
             Ok::<_, String>(json!({
                 "kind": settlement_kind(settlement.kind),
+                "attemptId": hex(&settlement.attempt_id.as_hash()),
+                "basisDigest": hex(&settlement.basis_digest),
+                "externalEvidenceDigest": hex(&settlement.external_evidence_digest),
+                "schemaAdmissionEvidenceDigest": hex(
+                    &settlement.schema_admission_evidence_digest,
+                ),
                 "commitDigest": hex(&commit_digest),
                 "resultDigest": hex(&settlement.result_digest),
                 "canonicalResultByteCount": settlement.canonical_result_bytes.len(),
-                "observation": observation
+                "patch": patch
             }))
         })
         .transpose()?;
@@ -551,8 +632,8 @@ fn report(
     });
     Ok(json!({
         "phase": phase,
-        "writerEpoch": writer_epoch,
         "requestId": hex(&request.request_id().as_hash()),
+        "writerEpoch": writer_epoch,
         "compiler": {
             "coreDigest": admitted.source_core_digest(),
             "targetIrDigest": admitted.target_ir_digest(),
@@ -584,32 +665,24 @@ fn report(
     }))
 }
 
-fn decode_observation(bytes: &[u8]) -> Result<Value, String> {
+fn decode_patch_settlement(bytes: &[u8]) -> Result<Value, String> {
     let value = decode_canonical_cbor_v1(bytes)
         .map_err(|error| format!("settlement result was not canonical: {error:?}"))?;
-    let status = canonical_text_field(&value, "posture")?;
-    let files_value = canonical_field(&value, "files")?;
-    let CanonicalValueV1::Array(files) = files_value else {
-        return Err("settlement files field was not an array".to_owned());
-    };
-    let files = files
-        .iter()
-        .map(|file| {
-            Ok(json!({
-                "path": canonical_text_field(file, "path")?,
-                "bytesHex": hex(canonical_bytes_field(file, "bytes")?)
-            }))
-        })
-        .collect::<Result<Vec<_>, String>>()?;
-    let refusal = match canonical_field(&value, "obstruction")? {
-        CanonicalValueV1::Null => Value::Null,
-        CanonicalValueV1::Text(value) => json!(value),
-        _ => return Err("settlement obstruction field was invalid".to_owned()),
-    };
     Ok(json!({
-        "status": status,
-        "files": files,
-        "refusal": refusal
+        "status": canonical_text_field(&value, "posture")?,
+        "path": canonical_optional_text_field(&value, "path")?,
+        "requestBasis": hex(canonical_bytes_field(&value, "requestBasis")?),
+        "evidence": hex(canonical_bytes_field(&value, "evidence")?),
+        "beforeContentDigest": canonical_optional_bytes_hex_field(
+            &value,
+            "beforeContentDigest",
+        )?,
+        "afterContentDigest": canonical_optional_bytes_hex_field(
+            &value,
+            "afterContentDigest",
+        )?,
+        "resultingBasis": canonical_optional_bytes_hex_field(&value, "resultingBasis")?,
+        "obstruction": canonical_optional_text_field(&value, "obstruction")?
     }))
 }
 
@@ -643,21 +716,41 @@ fn canonical_bytes_field<'a>(value: &'a CanonicalValueV1, field: &str) -> Result
     }
 }
 
+fn canonical_optional_text_field(value: &CanonicalValueV1, field: &str) -> Result<Value, String> {
+    match canonical_field(value, field)? {
+        CanonicalValueV1::Null => Ok(Value::Null),
+        CanonicalValueV1::Text(value) => Ok(json!(value)),
+        _ => Err(format!("canonical field {field} was not optional text")),
+    }
+}
+
+fn canonical_optional_bytes_hex_field(
+    value: &CanonicalValueV1,
+    field: &str,
+) -> Result<Value, String> {
+    match canonical_field(value, field)? {
+        CanonicalValueV1::Null => Ok(Value::Null),
+        CanonicalValueV1::Bytes(value) => Ok(json!(hex(value))),
+        _ => Err(format!("canonical field {field} was not optional bytes")),
+    }
+}
+
 fn adapter_id() -> ExternalActionAdapterIdV1 {
-    ExternalActionAdapterIdV1::from_hash(digest("hello-effect:bounded-adapter"))
+    ExternalActionAdapterIdV1::from_hash(digest("hello-effect-patch:bounded-adapter"))
 }
 
 fn adapter_profile(
     admitted: &AdmittedEdictExternalActionRequestV1,
-) -> BoundedWorkspaceObservationProfileV1 {
+) -> ValidatedWorkspacePatchProfileV1 {
     let request = admitted.request();
-    BoundedWorkspaceObservationProfileV1 {
+    ValidatedWorkspacePatchProfileV1 {
         operation_id: request.operation_id,
         input_schema_digest: request.input_schema_digest,
         settlement_schema_digest: request.settlement_schema_digest,
         reconciliation_law_digest: request.reconciliation_law_digest,
         authority_scope_digest: request.authority_scope_digest,
         adapter_id: adapter_id(),
+        max_file_bytes: MAX_FILE_BYTES_V1,
     }
 }
 
@@ -708,15 +801,15 @@ fn transaction_context(
         writer_epoch,
         segment_id: SEGMENT_ID,
         transaction_id: WalTransactionId::from_hash(digest(&format!(
-            "hello-effect:{phase}:{}",
+            "hello-effect-patch:{phase}:{}",
             hex(&admitted.request().request_id().as_hash())
         ))),
         durability_mode: WalDurabilityMode::StrictFilesystem,
-        payload_codec_id: PayloadCodecId::from_hash(digest("hello-effect:codec")),
-        payload_schema_id: PayloadSchemaId::from_hash(digest("hello-effect:schema")),
+        payload_codec_id: PayloadCodecId::from_hash(digest("hello-effect-patch:codec")),
+        payload_schema_id: PayloadSchemaId::from_hash(digest("hello-effect-patch:schema")),
         payload_schema_version: 1,
         canonical_encoding_version: 1,
-        digest_domain: digest("hello-effect:wal-domain"),
+        digest_domain: digest("hello-effect-patch:wal-domain"),
     }
 }
 

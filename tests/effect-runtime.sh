@@ -24,10 +24,16 @@ mkdir -p "$effect_root"
 # Producer checkout paths may be relative at the public shell boundary. The
 # generated Cargo manifest must contain their canonical targets, not paths that
 # Cargo would reinterpret relative to the nested build directory.
+#
+# The link path is deliberately relative, because that is what this probe
+# exercises. The link target must be absolute: a symlink target is resolved
+# against the directory holding the link, so linking a relative producer path
+# from a nested build directory produces a dangling link rather than a
+# relative producer path.
 relative_repo_links="$effect_root/relative-repos"
 mkdir -p "$relative_repo_links"
-ln -s "$EDICT_REPO" "$relative_repo_links/edict"
-ln -s "$ECHO_REPO" "$relative_repo_links/echo"
+ln -s "$(CDPATH='' cd -- "$EDICT_REPO" && pwd -P)" "$relative_repo_links/edict"
+ln -s "$(CDPATH='' cd -- "$ECHO_REPO" && pwd -P)" "$relative_repo_links/echo"
 EDICT_REPO="$relative_repo_links/edict" \
 ECHO_REPO="$relative_repo_links/echo" \
 ./tests/effect-build.sh
@@ -99,6 +105,10 @@ assert_identity() {
     and .compiler.intent == "observe"
   ' "$report_file" >/dev/null
 }
+
+# Writer-epoch assertions are shared by both runtime witnesses and are
+# themselves covered by tests/writer-epoch-assertions.sh.
+. tests/lib/writer-epoch-assertions.sh
 
 assert_posture() {
   report_file=$1
@@ -182,6 +192,12 @@ run_phase request "$golden_case" "$golden_wal" "$golden_root/request-report.json
 assert_posture "$golden_root/request-report.json" request requested 1
 test ! -e "$golden_workspace/$golden_path"
 
+# The first write phase opens the epoch chain on a fresh WAL, and Echo persists
+# the ledger and the writer lease that fence it.
+assert_first_writer_epoch "$golden_root/request-report.json"
+test -s "$golden_wal/writer-epochs.ecwal"
+test -e "$golden_wal/writer-epoch.lock"
+
 project_root=$(pwd -P)
 (
   cd "$effect_root"
@@ -197,13 +213,18 @@ assert_posture "$golden_root/relative-artifact-report.json" inspect requested 1
 
 run_phase inspect "$golden_case" "$golden_wal" "$golden_root/request-recovery.json"
 assert_posture "$golden_root/request-recovery.json" inspect requested 1
+assert_no_writer_epoch "$golden_root/request-recovery.json"
 
 run_phase claim "$golden_case" "$golden_wal" "$golden_root/claim-report.json"
 assert_posture "$golden_root/claim-report.json" claim claimed 2
+assert_chained_writer_epoch \
+  "$golden_root/claim-report.json" \
+  "$golden_root/request-report.json"
 test ! -e "$golden_workspace/$golden_path"
 
 run_phase inspect "$golden_case" "$golden_wal" "$golden_root/claim-recovery.json"
 assert_posture "$golden_root/claim-recovery.json" inspect claimed 2
+assert_no_writer_epoch "$golden_root/claim-recovery.json"
 
 printf '%s' "$golden_value" >"$golden_workspace/$golden_path"
 run_phase \
@@ -214,6 +235,61 @@ run_phase \
   "$golden_workspace"
 golden_settlement="$golden_root/settlement-report.json"
 assert_posture "$golden_settlement" settle settled 3
+assert_chained_writer_epoch "$golden_settlement" "$golden_root/claim-report.json"
+
+# No writer epoch is reused anywhere in the ordered golden path.
+test "$(
+  jq -r '.writerEpoch.epochId' \
+    "$golden_root/request-report.json" \
+    "$golden_root/claim-report.json" \
+    "$golden_settlement" |
+    sort -u |
+    wc -l |
+    tr -d ' '
+)" = 3
+
+# Retained epoch state must stay bounded across restarts rather than growing
+# with each one. A size ceiling checked after a handful of epochs cannot show
+# that, because an append-only ledger also fits any ceiling early on. This
+# drives many fresh write phases on one WAL, each a separate host process
+# taking a new epoch, and requires the ledger to stop changing size.
+ledger_root="$effect_root/ledger-plateau"
+mkdir -p "$ledger_root/workspace/notes"
+printf 'observed' >"$ledger_root/workspace/notes/ledger.txt"
+ledger_wal="$ledger_root/wal"
+ledger_sizes="$ledger_root/sizes"
+: >"$ledger_sizes"
+ledger_worldline=100
+while test "$ledger_worldline" -lt 116
+do
+  make_case \
+    "$ledger_root/request-$ledger_worldline.json" \
+    "$ledger_worldline" \
+    notes/ledger.txt \
+    "$(hex_bytes observed)" \
+    65536 \
+    notes/ledger.txt
+  run_phase \
+    request \
+    "$ledger_root/request-$ledger_worldline.json" \
+    "$ledger_wal" \
+    "$ledger_root/report-$ledger_worldline.json"
+  wc -c <"$ledger_wal/writer-epochs.ecwal" | tr -d ' ' >>"$ledger_sizes"
+  ledger_worldline=$((ledger_worldline + 1))
+done
+
+test "$(
+  jq -sr '[.[].writerEpoch.epochId] | unique | length' \
+    "$ledger_root"/report-*.json
+)" = 16
+
+ledger_plateau=$(tail -n 8 "$ledger_sizes" | sort -u | wc -l | tr -d ' ')
+if test "$ledger_plateau" -ne 1; then
+  echo "retained writer-epoch ledger did not stop growing across restarts" >&2
+  tail -n 8 "$ledger_sizes" >&2
+  exit 1
+fi
+
 jq -e \
   --arg path "$golden_path" \
   --arg bytes_hex "$(hex_bytes "$golden_value")" \
@@ -230,10 +306,15 @@ jq -e \
 
 # A retained exact candidate reconciles to the original fact without WAL
 # growth; a valid kind-only mutation obstructs without another commit.
+# A null writerEpoch in a retry report cannot show that retry took no epoch:
+# the phase supplies that null itself, and acquiring an epoch would change the
+# persisted ledger without changing the commit count.
+cp "$golden_wal/writer-epochs.ecwal" "$golden_root/ledger-before-retry.ecwal"
 run_phase retry "$golden_case" "$golden_wal" "$golden_root/retry-report.json" exact
 jq -e '
   .phase == "retry"
   and .retry == "idempotent"
+  and .writerEpoch == null
   and .posture == "settled"
   and .wal.commitCountBefore == 3
   and .wal.commitCountAfter == 3
@@ -254,9 +335,14 @@ jq -e '
   .phase == "retry"
   and .retry == "obstructed"
   and .obstruction == "conflictingSettlement"
+  and .writerEpoch == null
   and .wal.commitCountBefore == 3
   and .wal.commitCountAfter == 3
 ' "$golden_root/conflict-report.json" >/dev/null
+
+# Neither retry may have taken a writer epoch, which only the retained ledger
+# can show.
+cmp "$golden_root/ledger-before-retry.ecwal" "$golden_wal/writer-epochs.ecwal"
 
 # The runtime-owned permitted aperture is bound into the durable request. A
 # caller cannot broaden it between claim recovery and adapter construction.
@@ -345,6 +431,11 @@ run_phase \
   "$unknown_root/wal" \
   "$unknown_root/unknown-report.json"
 assert_posture "$unknown_root/unknown-report.json" unknown settled 3
+# The uncertainty settlement is a separate write entrypoint from settle. The
+# every-write-phase epoch guarantee has to be shown here too.
+assert_chained_writer_epoch \
+  "$unknown_root/unknown-report.json" \
+  "$unknown_root/claim-report.json"
 jq -e '
   .settlement.kind == "outcomeUnknown"
   and .settlement.observation.status == "outcomeUnknown"

@@ -1,0 +1,32 @@
+{
+  "schema": "edict.application/v1",
+  "buildKind": "externalAction",
+  "coordinate": "examples.workspace_patcher@1",
+  "sources": [
+    "patch/src/apply-validated-patch.edict"
+  ],
+  "lawpacks": [
+    {
+      "manifest": "patch/vendor/workspace-patch/manifest.cbor",
+      "exports": "patch/vendor/workspace-patch/exports.cbor",
+      "adapter": "patch/vendor/workspace-patch/adapter.cbor",
+      "targetConfiguration": "patch/vendor/workspace-patch/request-profile-configuration.cbor"
+    }
+  ],
+  "externalActionResources": [
+    {
+      "artifact": "patch/vendor/workspace-patch/input-schema.cbor"
+    },
+    {
+      "artifact": "patch/vendor/workspace-patch/settlement-schema.cbor"
+    },
+    {
+      "artifact": "patch/vendor/workspace-patch/reconciliation-law.cbor"
+    }
+  ],
+  "target": {
+    "profile": "echo.dpo@1",
+    "providerPackage": ".build/patch/echo-provider"
+  },
+  "outputDirectory": ".build/patch/application"
+}

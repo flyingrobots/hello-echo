@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "edict": {
+    "repository": "flyingrobots/edict",
+    "commit": "df80f92ad6242c6da31a64224666fd37aa43b0d0"
+  },
+  "echo": {
+    "repository": "flyingrobots/echo",
+    "commit": "c354d531679861fb7bbd52ab7b7703807909ab86"
+  }
+}
