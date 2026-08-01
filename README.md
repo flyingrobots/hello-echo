@@ -193,11 +193,23 @@ The request JSON separates untrusted `proposal` data from the declared
 That 65,536-byte cap bounds the file, not the replacement. The encoded patch
 carries the target path and the expected content digest inside the same bounded
 request carrier, so the largest accepted replacement is smaller than the cap and
-shrinks as the path grows: roughly 65,366 bytes for `a.txt` and 65,313 for a
-57-character path. The host does not guess that overhead. It surfaces the
-compiler's own budget refusal as `replacementExceedsRequestBudget`, so a
-replacement that cannot be carried is refused for a stated reason rather than
-reported as a malformed request.
+shrinks as the path grows.
+
+The budget is producer-owned. Echo's `encode_validated_workspace_patch_input_v1`
+refuses with `FileBudgetExceeded` once the canonical encoding passes
+`MAX_CANONICAL_PATCH_INPUT_BYTES`, and Hello Echo surfaces that as
+`replacementExceedsRequestBudget` rather than deriving a ceiling of its own. A
+replacement that cannot be carried is therefore refused for a stated reason
+instead of being reported as a malformed request.
+
+The reachable size follows from that bound minus the canonical framing, so it is
+not a constant this repository can pin. Measured against Echo
+`c354d531679861fb7bbd52ab7b7703807909ab86`, it was 65,366 bytes for `a.txt`,
+65,360 for `notes/x.txt`, and 65,313 for a 57-character path. Those figures
+illustrate the shape of the bound; they are not a contract, and they move with
+the producer's encoding. Nothing in this repository depends on them, and
+`tests/patch-runtime.sh` probes the refusal rather than any particular
+threshold.
 The host uses Echo's generic validated-patch encoder and authority functions;
 it does not reconstruct patch policy or perform native application semantics.
 The observation is also a closed schema. Echo durably records the request and

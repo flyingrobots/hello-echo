@@ -40,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   reported, not merely checked for shape.
 - A retained-ledger plateau case in both witnesses, driving sixteen fresh
   writer epochs on one WAL and requiring the persisted ledger to stop changing
-  size, which a fixed size ceiling could not establish.
+  size, which a fixed-size ceiling could not establish.
 - `wal.lastCommitDigest` in both reports, so a successor epoch's declared
   predecessor commit can be compared with the commit that actually closed it.
 - Build refusal for cross-wired, unresolved, or sentinel external-action schema
