@@ -70,6 +70,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   commits, and runs the complete witness gate plus shell syntax, formatting,
   and strict clippy on pull requests and pushes to `main`.
 
+- Large file bodies are handed to `jq` through `--rawfile` rather than `--arg`.
+  A body at the file budget is 131,072 hex characters, which is exactly Linux's
+  `MAX_ARG_STRLEN`, so the oversize cases failed with "Argument list too long"
+  anywhere but a developer machine.
 - Absolute symlink targets in the relative-producer-path probe. The probe
   linked the producer checkout as given, so a relative producer path produced a
   dangling link rather than a relative path, and the observation witness failed

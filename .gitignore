@@ -1,1 +1,4 @@
 /.build/
+
+# Producer checkouts materialised by CI.
+.producers/

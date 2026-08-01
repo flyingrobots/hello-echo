@@ -62,11 +62,20 @@ make_case() {
   replacement_hex=$5
   permitted_path=$6
   max_settlement_bytes=$7
+  # File bodies are carried as hex, and a body at the file budget is 131,072
+  # hex characters. Linux caps a single argument at MAX_ARG_STRLEN, which is
+  # exactly that, so passing one through --arg fails with "Argument list too
+  # long". macOS permits far larger arguments, which is why this only appears
+  # off a developer machine. --rawfile has no such limit.
+  make_case_dir=$(dirname "$case_file")
+  mkdir -p "$make_case_dir"
+  printf '%s' "$before_hex" >"$make_case_dir/.before.hex"
+  printf '%s' "$replacement_hex" >"$make_case_dir/.replacement.hex"
   jq -n \
     --argjson worldline_byte "$worldline_byte" \
     --arg path "$path" \
-    --arg before_hex "$before_hex" \
-    --arg replacement_hex "$replacement_hex" \
+    --rawfile before_hex "$make_case_dir/.before.hex" \
+    --rawfile replacement_hex "$make_case_dir/.replacement.hex" \
     --arg permitted_path "$permitted_path" \
     --argjson max_settlement_bytes "$max_settlement_bytes" \
     '{
