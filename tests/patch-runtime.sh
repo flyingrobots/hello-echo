@@ -219,8 +219,7 @@ assert_posture "$golden_settlement" apply settled 3
 assert_chained_writer_epoch "$golden_settlement" "$golden_root/claim-report.json"
 test "$(cat "$golden_workspace/$golden_path")" = "$golden_replacement"
 
-# No writer epoch is reused anywhere in the ordered golden path, and the
-# retained ledger stays bounded rather than growing per restart.
+# No writer epoch is reused anywhere in the ordered golden path.
 test "$(
   jq -r '.writerEpoch.epochId' \
     "$golden_root/request-report.json" \
@@ -230,7 +229,52 @@ test "$(
     wc -l |
     tr -d ' '
 )" = 3
-test "$(wc -c <"$golden_wal/writer-epochs.ecwal" | tr -d ' ')" -le 4096
+
+# Retained epoch state must stay bounded across restarts rather than growing
+# with each one. A size ceiling checked after a handful of epochs cannot show
+# that, because an append-only ledger also fits any ceiling early on. This
+# drives many fresh write phases on one WAL, each a separate host process
+# taking a new epoch, and requires the ledger to stop changing size.
+ledger_root="$patch_root/ledger-plateau"
+mkdir -p "$ledger_root/workspace/notes"
+printf 'hello' >"$ledger_root/workspace/notes/ledger.txt"
+ledger_wal="$ledger_root/wal"
+ledger_sizes="$ledger_root/sizes"
+: >"$ledger_sizes"
+ledger_worldline=100
+while test "$ledger_worldline" -lt 116
+do
+  make_case \
+    "$ledger_root/request-$ledger_worldline.json" \
+    "$ledger_worldline" \
+    notes/ledger.txt \
+    "$(hex_bytes hello)" \
+    "$(hex_bytes "patched by $ledger_worldline")" \
+    notes/ledger.txt \
+    65536
+  run_phase \
+    request \
+    "$ledger_root/request-$ledger_worldline.json" \
+    "$ledger_wal" \
+    "$ledger_root/report-$ledger_worldline.json"
+  wc -c <"$ledger_wal/writer-epochs.ecwal" | tr -d ' ' >>"$ledger_sizes"
+  ledger_worldline=$((ledger_worldline + 1))
+done
+
+# Sixteen distinct epochs were taken on this WAL.
+test "$(
+  jq -sr '[.[].writerEpoch.epochId] | unique | length' \
+    "$ledger_root"/report-*.json
+)" = 16
+
+# The final eight observations must all be the same size. An append-only
+# ledger would still be growing by then.
+ledger_plateau=$(tail -n 8 "$ledger_sizes" | sort -u | wc -l | tr -d ' ')
+if test "$ledger_plateau" -ne 1; then
+  echo "retained writer-epoch ledger did not stop growing across restarts" >&2
+  tail -n 8 "$ledger_sizes" >&2
+  exit 1
+fi
 
 # Exact retry is effect-free; a conflicting retry obstructs without WAL growth.
 run_phase retry "$golden_case" "$golden_wal" "$golden_root/retry-report.json" exact
