@@ -100,6 +100,13 @@ mutate "start LSN is an object" \
 mutate "start LSN is absent" \
   'del(.writerEpoch.startedAtLsn)'
 
+# An LSN is a discrete position, so a fractional value is malformed evidence
+# even though it is a number greater than its predecessor.
+mutate "start LSN is fractional" \
+  '.writerEpoch.startedAtLsn = 0.5'
+mutate "start LSN is negative" \
+  '.writerEpoch.startedAtLsn = -1'
+
 # A malformed identity is not an epoch.
 mutate "epoch id is not a digest" \
   '.writerEpoch.epochId = "not-a-digest"'

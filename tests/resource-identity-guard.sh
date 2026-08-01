@@ -261,4 +261,51 @@ intent applyValidated(input: ApplyPatchInput)
 EOF
 expect_reject "$work/adopt" "$work/adopt.edict" "slot adopting its successor's inline digest"
 
+# A commented coordinate is not a declaration. If it were treated as one it
+# would shadow the live slot below it, and a cross-wired live slot would pass.
+cat >"$work/comment.edict" <<EOF
+intent applyValidated(input: ApplyPatchInput)
+{
+    // workspace.patch.input@1 digest "$good_input"
+    input schema workspace.patch.input@1
+      digest "$good_settlement"
+    settlement schema workspace.patch.settlement@1
+      digest "$good_settlement"
+    reconcile workspace.patch.reconcile@1
+      digest "$good_reconcile";
+}
+EOF
+expect_reject "$work/good" "$work/comment.edict" "commented coordinate shadowing a cross-wired slot"
+
+# The same comment above a correctly wired slot must still be accepted.
+cat >"$work/comment-ok.edict" <<EOF
+intent applyValidated(input: ApplyPatchInput)
+{
+    // workspace.patch.input@1 digest "$good_settlement"
+    input schema workspace.patch.input@1
+      digest "$good_input"
+    settlement schema workspace.patch.settlement@1
+      digest "$good_settlement"
+    reconcile workspace.patch.reconcile@1
+      digest "$good_reconcile";
+}
+EOF
+expect_accept "$work/good" "$work/comment-ok.edict" "comment above a correctly wired slot"
+
+# A coordinate outside its own clause does not declare the slot.
+cat >"$work/bareword.edict" <<EOF
+intent applyValidated(input: ApplyPatchInput)
+{
+    requires workspace.patch.input@1
+      digest "$good_settlement"
+    input schema workspace.patch.input@1
+      digest "$good_input"
+    settlement schema workspace.patch.settlement@1
+      digest "$good_settlement"
+    reconcile workspace.patch.reconcile@1
+      digest "$good_reconcile";
+}
+EOF
+expect_accept "$work/good" "$work/bareword.edict" "coordinate outside its clause is not the slot"
+
 echo "resource identity guard: all cases passed"

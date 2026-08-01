@@ -26,6 +26,7 @@ assert_first_writer_epoch() {
     and .writerEpoch.previousEpochId == null
     and .writerEpoch.previousEpochFinalCommitDigest == null
     and (.writerEpoch.startedAtLsn | type) == "number"
+    and (.writerEpoch.startedAtLsn | floor) == .writerEpoch.startedAtLsn
     and .writerEpoch.startedAtLsn == 0
   ' "$report_file" >/dev/null
 }
@@ -51,8 +52,16 @@ assert_chained_writer_epoch() {
       and .writerEpoch.previousEpochId == $previous[0].writerEpoch.epochId
       and .writerEpoch.previousEpochFinalCommitDigest
           == $previous[0].wal.lastCommitDigest
+      # An LSN is a discrete u64 position. A type check alone admits 0.5,
+      # which compares greater than a predecessor 0 and would let malformed
+      # epoch evidence through.
       and (.writerEpoch.startedAtLsn | type) == "number"
       and ($previous[0].writerEpoch.startedAtLsn | type) == "number"
+      and (.writerEpoch.startedAtLsn | floor) == .writerEpoch.startedAtLsn
+      and ($previous[0].writerEpoch.startedAtLsn | floor)
+          == $previous[0].writerEpoch.startedAtLsn
+      and .writerEpoch.startedAtLsn >= 0
+      and $previous[0].writerEpoch.startedAtLsn >= 0
       and .writerEpoch.startedAtLsn > $previous[0].writerEpoch.startedAtLsn
     ' \
     "$report_file" >/dev/null

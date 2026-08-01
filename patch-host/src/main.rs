@@ -15,7 +15,7 @@ use warp_core::causal_wal::{
 use warp_core::external_action::{
     claim_external_action, reconcile_external_action_settlement_retry,
     record_external_action_request, ExternalActionAdapterBindingV1, ExternalActionAdapterIdV1,
-    ExternalActionAdapterRegistryV1, ExternalActionCoordinatorV1,
+    ExternalActionAdapterRegistryV1, ExternalActionCoordinatorV1, ExternalActionProtocolErrorV1,
     ExternalActionSettlementCandidateV1, ExternalActionSettlementKindV1,
     ExternalActionTransactionContextV1, RecoveredExternalActionPostureV1,
 };
@@ -510,7 +510,13 @@ fn retry_phase(
             );
             print_json(&Value::Object(report))
         }
-        Err(_) if retry_mode == "conflict-kind" => {
+        // Only a conflict may report a conflict. A wildcard would let an
+        // internal validation or recovery regression satisfy the witness case
+        // that is meant to prove the kind-only mutation was rejected for
+        // conflicting with the retained settlement.
+        Err(ExternalActionProtocolErrorV1::ConflictingSettlement)
+            if retry_mode == "conflict-kind" =>
+        {
             let mut report = report(
                 &invocation.phase,
                 request_case,

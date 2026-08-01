@@ -180,6 +180,10 @@ ECHO_REPO=/path/to/echo \
 ./tests/patch-runtime.sh
 ```
 
+This witness needs `b3sum` in addition to `jq`. It compares the content digests
+the settlement reports against digests computed from the witnessed bytes, so it
+must hash them the same way the adapter does.
+
 The build corroborates the exact Edict source, lawpack closure, digest
 sidecars, Core artifact, and Target IR artifact for
 `workspace.patch.applyValidated@1`. Edict emits request data only. The compiler

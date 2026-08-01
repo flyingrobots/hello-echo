@@ -31,24 +31,44 @@ test -f "$source_file"
 # prefix of a hypothetical workspace.patch.input@10, so the character after the
 # match may not be a digit.
 declared_identity() {
-  awk -v coordinate="$1" '
-    function digest_in(text,   start) {
+  awk -v coordinate="$1" -v clause="$2" '
+    function strip_comment(text,   at) {
+      at = index(text, "//")
+      if (at > 0) {
+        return substr(text, 1, at - 1)
+      }
+      return text
+    }
+    function digest_in(text) {
       if (match(text, /digest "[^"]*"/)) {
         return substr(text, RSTART + 8, RLENGTH - 9)
       }
       return ""
     }
-    function names_slot(line,   at, tail) {
-      at = index(line, coordinate)
-      if (at == 0) {
+    function names_slot(text,   at, clause_at, tail) {
+      # The coordinate must appear as part of its own clause, after the clause
+      # keyword. A bare occurrence elsewhere in the file does not declare a
+      # slot.
+      clause_at = index(text, clause)
+      if (clause_at == 0) {
         return 0
       }
-      tail = substr(line, at + length(coordinate), 1)
+      at = index(text, coordinate)
+      if (at == 0 || at < clause_at) {
+        return 0
+      }
+      # A coordinate must not match inside a longer one.
+      tail = substr(text, at + length(coordinate), 1)
       return tail !~ /[0-9]/
     }
-    !seen && names_slot($0) {
+    {
+      # Comments are not declarations. A commented coordinate carrying an
+      # expected digest would otherwise shadow the live slot below it.
+      line = strip_comment($0)
+    }
+    !seen && names_slot(line) {
       seen = 1
-      found = digest_in(substr($0, index($0, coordinate) + length(coordinate)))
+      found = digest_in(substr(line, index(line, coordinate) + length(coordinate)))
       if (found != "") {
         print found
         exit
@@ -61,26 +81,29 @@ declared_identity() {
       # slot that follows it, which is invisible when two resources share an
       # identity. An apostrophe cannot appear in this comment: the awk program
       # is single-quoted by the enclosing shell.
-      if ($0 ~ /@[0-9]+/) {
+      if (line ~ /@[0-9]+/) {
         exit
       }
-      found = digest_in($0)
+      found = digest_in(line)
       if (found != "") {
         print found
         exit
       }
       # The semicolon closes the declaration without a digest having appeared.
-      if (index($0, ";") > 0) {
+      if (index(line, ";") > 0) {
         exit
       }
     }
-  ' "$2"
+  ' "$3"
 }
 
-for slot in input:input-schema settlement:settlement-schema reconcile:reconciliation-law
+# slot kind : vendored resource : the clause keyword that introduces it
+for slot in "input:input-schema:input schema" "settlement:settlement-schema:settlement schema" "reconcile:reconciliation-law:reconcile"
 do
   kind=${slot%%:*}
-  resource=${slot#*:}
+  slot_rest=${slot#*:}
+  resource=${slot_rest%%:*}
+  clause=${slot_rest#*:}
   coordinate="$namespace.$kind@1"
   sidecar="$vendor/$resource.sha256"
 
@@ -153,7 +176,7 @@ do
     exit 1
   fi
 
-  declared=$(declared_identity "$coordinate" "$source_file")
+  declared=$(declared_identity "$coordinate" "$clause" "$source_file")
   if test -z "$declared"; then
     echo "compiler source declares no digest for $coordinate" >&2
     exit 1

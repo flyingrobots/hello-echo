@@ -5,6 +5,9 @@ set -eu
 : "${ECHO_REPO:?set ECHO_REPO to the compatible Echo checkout}"
 
 command -v jq >/dev/null
+# The witness binds the reported content digests to the witnessed bytes, which
+# needs the same hash the adapter uses.
+command -v b3sum >/dev/null
 
 if ! test -x ./tests/patch-build.sh; then
   echo "Hello Effect patch build boundary is not implemented" >&2
@@ -35,6 +38,11 @@ test ! -e .build/patch/application/verification-report.cbor
 
 hex_bytes() {
   printf '%s' "$1" | od -An -tx1 | tr -d ' \n'
+}
+
+# The content digest the adapter reports for a given file body.
+content_digest() {
+  printf '%s' "$1" | b3sum --no-names | tr -d ' \n'
 }
 
 make_case() {
@@ -142,11 +150,13 @@ complete_success_case() {
   test "$(cat "$workspace_root/$path")" = "$replacement"
   jq -e \
     --arg path "$path" \
+    --arg before_digest "$(content_digest "$before")" \
+    --arg after_digest "$(content_digest "$replacement")" \
     '.settlement.kind == "succeeded"
       and .settlement.patch.status == "succeeded"
       and .settlement.patch.path == $path
-      and (.settlement.patch.beforeContentDigest | test("^[0-9a-f]{64}$"))
-      and (.settlement.patch.afterContentDigest | test("^[0-9a-f]{64}$"))
+      and .settlement.patch.beforeContentDigest == $before_digest
+      and .settlement.patch.afterContentDigest == $after_digest
       and (.settlement.patch.resultingBasis | test("^[0-9a-f]{64}$"))
       and (.settlement.attemptId | test("^[0-9a-f]{64}$"))
       and (.settlement.basisDigest | test("^[0-9a-f]{64}$"))
@@ -381,10 +391,12 @@ run_phase \
   "$reconcile_root/reconcile-report.json" \
   "$reconcile_workspace"
 assert_posture "$reconcile_root/reconcile-report.json" reconcile settled 3
-jq -e '
+jq -e \
+  --arg after_digest "$(content_digest after)" \
+  '
   .settlement.kind == "succeeded"
   and .settlement.patch.beforeContentDigest == null
-  and (.settlement.patch.afterContentDigest | test("^[0-9a-f]{64}$"))
+  and .settlement.patch.afterContentDigest == $after_digest
   and .settlement.basisDigest == .settlement.patch.requestBasis
   and .settlement.externalEvidenceDigest == .settlement.patch.evidence
   and .settlement.patch.evidence == .settlement.patch.resultingBasis
