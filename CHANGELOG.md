@@ -41,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - A retained-ledger plateau case in both witnesses, driving sixteen fresh
   writer epochs on one WAL and requiring the persisted ledger to stop changing
   size, which a fixed-size ceiling could not establish.
+- A two-route basis binding for the reconciled success settlement, since the
+  reconciler is a distinct implementation from the adapter and the existing
+  probe exercised only the apply path.
 - Writer-epoch coverage on the reconciliation and uncertainty write
   entrypoints, and retained-ledger snapshots across both retries, since a null
   epoch in a retry report is supplied by the phase itself and cannot show that

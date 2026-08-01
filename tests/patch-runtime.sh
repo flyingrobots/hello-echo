@@ -182,6 +182,38 @@ complete_success_case() {
     "$case_root/settlement-report.json" >/dev/null
 }
 
+# Returns the basis the host derives over an exact (path, bytes) pair.
+#
+# Echo derives a basis by domain-separated hashing. Recomputing that here would
+# rebuild producer logic in the consumer, so the host is asked instead: a patch
+# whose declared observation is those bytes reports a request basis over them.
+# Comparing a retained basis against this is a two-route derivation, not a
+# self-agreement.
+request_basis_for() {
+  probe_root="$patch_root/basis-probe-$1"
+  probe_path=$2
+  probe_bytes=$3
+  mkdir -p "$probe_root/workspace/$(dirname "$probe_path")"
+  printf '%s' "$probe_bytes" >"$probe_root/workspace/$probe_path"
+  make_case \
+    "$probe_root/request.json" \
+    "$4" \
+    "$probe_path" \
+    "$(hex_bytes "$probe_bytes")" \
+    "$(hex_bytes 'basis probe replacement')" \
+    "$probe_path" \
+    65536
+  run_phase request "$probe_root/request.json" "$probe_root/wal" "$probe_root/req.json"
+  run_phase claim "$probe_root/request.json" "$probe_root/wal" "$probe_root/clm.json"
+  run_phase \
+    apply \
+    "$probe_root/request.json" \
+    "$probe_root/wal" \
+    "$probe_root/settle.json" \
+    "$probe_root/workspace"
+  jq -r '.settlement.patch.requestBasis' "$probe_root/settle.json"
+}
+
 # Golden path: proposal data and compiler artifacts are admitted before the
 # separately invoked adapter mutates the workspace.
 golden_root="$patch_root/golden"
@@ -410,6 +442,17 @@ run_phase \
   "$reconcile_root/reconcile-report.json" \
   "$reconcile_workspace"
 assert_posture "$reconcile_root/reconcile-report.json" reconcile settled 3
+# The reconciler is a distinct implementation from the adapter, so its retained
+# evidence needs its own binding. Without this the three agreeing fields could
+# all carry one arbitrary value from a regression confined to
+# ValidatedWorkspacePatchReconcilerV1.
+reconciled_basis=$(
+  jq -r '.settlement.patch.resultingBasis' "$reconcile_root/reconcile-report.json"
+)
+test "$reconciled_basis" = "$(request_basis_for reconciled "$reconcile_path" after 91)"
+# And not a basis over the pre-state, so the equality above cannot be met by a
+# reconciler that retained the wrong bytes.
+test "$reconciled_basis" != "$(request_basis_for reconciled-pre "$reconcile_path" before 92)"
 # Reconciliation is a separate write entrypoint from apply. The every-write-
 # phase epoch guarantee has to be shown here too, not only on the golden path.
 assert_chained_writer_epoch \
