@@ -296,6 +296,12 @@ if test "$ledger_plateau" -ne 1; then
 fi
 
 # Exact retry is effect-free; a conflicting retry obstructs without WAL growth.
+#
+# A null writerEpoch in the retry report cannot show that retry took no epoch:
+# retry_phase supplies that null itself, and acquiring an epoch would change
+# the persisted ledger without changing the commit count. The ledger bytes are
+# snapshotted instead.
+cp "$golden_wal/writer-epochs.ecwal" "$golden_root/ledger-before-retry.ecwal"
 run_phase retry "$golden_case" "$golden_wal" "$golden_root/retry-report.json" exact
 jq -e '
   .phase == "retry"
@@ -325,6 +331,10 @@ jq -e '
   and .wal.commitCountBefore == 3
   and .wal.commitCountAfter == 3
 ' "$golden_root/conflict-report.json" >/dev/null
+
+# Neither retry may have taken a writer epoch, which only the retained ledger
+# can show.
+cmp "$golden_root/ledger-before-retry.ecwal" "$golden_wal/writer-epochs.ecwal"
 
 # The permitted aperture is part of request identity. A caller cannot broaden
 # it after the request and claim are durable.
@@ -400,6 +410,11 @@ run_phase \
   "$reconcile_root/reconcile-report.json" \
   "$reconcile_workspace"
 assert_posture "$reconcile_root/reconcile-report.json" reconcile settled 3
+# Reconciliation is a separate write entrypoint from apply. The every-write-
+# phase epoch guarantee has to be shown here too, not only on the golden path.
+assert_chained_writer_epoch \
+  "$reconcile_root/reconcile-report.json" \
+  "$reconcile_root/claim-report.json"
 jq -e \
   --arg after_digest "$(content_digest after)" \
   '
@@ -437,6 +452,9 @@ run_phase \
   "$unknown_root/reconcile-report.json" \
   "$unknown_workspace"
 assert_posture "$unknown_root/reconcile-report.json" reconcile settled 3
+assert_chained_writer_epoch \
+  "$unknown_root/reconcile-report.json" \
+  "$unknown_root/claim-report.json"
 jq -e '
   .settlement.kind == "outcomeUnknown"
   and .settlement.patch.status == "outcomeUnknown"
@@ -458,6 +476,10 @@ test "$(cat "$unknown_workspace/ambiguous.txt")" = ambiguous
 # observed bytes and must not vary with the declared replacement. A producer
 # deriving it from the declared replacement fails the first check; one ignoring
 # the observation fails the second.
+# The worldline is held constant across these probes. Varying it would leave
+# the comparison unable to isolate the dependency: a producer keying off the
+# worldline byte alone could produce the same A/B/A pattern.
+unknown_evidence_worldline=97
 unknown_evidence_for() {
   probe_root="$patch_root/unknown-evidence-$1"
   probe_workspace="$probe_root/workspace"
@@ -465,7 +487,7 @@ unknown_evidence_for() {
   printf '%s' before >"$probe_workspace/ambiguous.txt"
   make_case \
     "$probe_root/request.json" \
-    "$4" \
+    "$unknown_evidence_worldline" \
     ambiguous.txt \
     "$(hex_bytes before)" \
     "$(hex_bytes "$2")" \
@@ -485,12 +507,12 @@ unknown_evidence_for() {
 }
 
 # Same declared replacement, different observed post-states.
-evidence_observed_one=$(unknown_evidence_for one intended observedOne 97)
-evidence_observed_two=$(unknown_evidence_for two intended observedTwo 98)
+evidence_observed_one=$(unknown_evidence_for one intended observedOne)
+evidence_observed_two=$(unknown_evidence_for two intended observedTwo)
 test "$evidence_observed_one" != "$evidence_observed_two"
 
 # Different declared replacement, same observed post-state.
-evidence_other_request=$(unknown_evidence_for three requested observedOne 99)
+evidence_other_request=$(unknown_evidence_for three requested observedOne)
 test "$evidence_other_request" = "$evidence_observed_one"
 
 # In an outcomeUnknown settlement `beforeContentDigest` carries the digest of

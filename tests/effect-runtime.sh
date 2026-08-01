@@ -300,10 +300,15 @@ jq -e \
 
 # A retained exact candidate reconciles to the original fact without WAL
 # growth; a valid kind-only mutation obstructs without another commit.
+# A null writerEpoch in a retry report cannot show that retry took no epoch:
+# the phase supplies that null itself, and acquiring an epoch would change the
+# persisted ledger without changing the commit count.
+cp "$golden_wal/writer-epochs.ecwal" "$golden_root/ledger-before-retry.ecwal"
 run_phase retry "$golden_case" "$golden_wal" "$golden_root/retry-report.json" exact
 jq -e '
   .phase == "retry"
   and .retry == "idempotent"
+  and .writerEpoch == null
   and .posture == "settled"
   and .wal.commitCountBefore == 3
   and .wal.commitCountAfter == 3
@@ -324,9 +329,14 @@ jq -e '
   .phase == "retry"
   and .retry == "obstructed"
   and .obstruction == "conflictingSettlement"
+  and .writerEpoch == null
   and .wal.commitCountBefore == 3
   and .wal.commitCountAfter == 3
 ' "$golden_root/conflict-report.json" >/dev/null
+
+# Neither retry may have taken a writer epoch, which only the retained ledger
+# can show.
+cmp "$golden_root/ledger-before-retry.ecwal" "$golden_wal/writer-epochs.ecwal"
 
 # The runtime-owned permitted aperture is bound into the durable request. A
 # caller cannot broaden it between claim recovery and adapter construction.
@@ -415,6 +425,11 @@ run_phase \
   "$unknown_root/wal" \
   "$unknown_root/unknown-report.json"
 assert_posture "$unknown_root/unknown-report.json" unknown settled 3
+# The uncertainty settlement is a separate write entrypoint from settle. The
+# every-write-phase epoch guarantee has to be shown here too.
+assert_chained_writer_epoch \
+  "$unknown_root/unknown-report.json" \
+  "$unknown_root/claim-report.json"
 jq -e '
   .settlement.kind == "outcomeUnknown"
   and .settlement.observation.status == "outcomeUnknown"

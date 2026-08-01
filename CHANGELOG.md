@@ -41,6 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - A retained-ledger plateau case in both witnesses, driving sixteen fresh
   writer epochs on one WAL and requiring the persisted ledger to stop changing
   size, which a fixed-size ceiling could not establish.
+- Writer-epoch coverage on the reconciliation and uncertainty write
+  entrypoints, and retained-ledger snapshots across both retries, since a null
+  epoch in a retry report is supplied by the phase itself and cannot show that
+  no epoch was taken.
 - Negative coverage for the retained postcondition evidence: the one settlement
   family where the declared replacement and the observed post-state differ now
   pins that the evidence varies with what was observed and not with what was
