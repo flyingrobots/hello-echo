@@ -135,4 +135,37 @@ do
   expect_reject "$work/sentinel" "$work/sentinel.edict" "sentinel identity of all $fill"
 done
 
+# A slot may carry its digest on the coordinate line. The guard must read that
+# slot's own digest rather than skipping past it and taking the next slot's,
+# which would reject a valid closure with a misleading mismatch.
+cat >"$work/inline.edict" <<EOF
+intent applyValidated(input: ApplyPatchInput)
+{
+  request pending: ExternalActionRequest<Bytes<max=65536>> =
+    patch(input.patch)
+    input schema workspace.patch.input@1 digest "$good_input"
+    settlement schema workspace.patch.settlement@1 digest "$good_settlement"
+    reconcile workspace.patch.reconcile@1 digest "$good_reconcile";
+  return pending;
+}
+EOF
+expect_accept "$work/good" "$work/inline.edict" "digests on the coordinate lines"
+
+# A slot that declares no digest at all must fail, not silently inherit the
+# next slot's digest.
+cat >"$work/missing.edict" <<EOF
+intent applyValidated(input: ApplyPatchInput)
+{
+  request pending: ExternalActionRequest<Bytes<max=65536>> =
+    patch(input.patch)
+    input schema workspace.patch.input@1
+    settlement schema workspace.patch.settlement@1
+      digest "$good_settlement"
+    reconcile workspace.patch.reconcile@1
+      digest "$good_reconcile";
+  return pending;
+}
+EOF
+expect_reject "$work/good" "$work/missing.edict" "input slot declares no digest"
+
 echo "resource identity guard: all cases passed"

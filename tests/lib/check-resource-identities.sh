@@ -20,19 +20,56 @@ source_file=$3
 test -d "$vendor"
 test -f "$source_file"
 
-# Reads the digest a slot declares. The coordinate names the slot and the
-# digest follows it on a later line, so this takes the first digest after the
-# coordinate and stops.
+# Reads the digest one slot declares.
+#
+# The digest may sit on the coordinate line or on a following line, so this
+# searches from the coordinate onward. It stops at the next coordinate or at
+# the end of the request declaration, so a slot that declares no digest reports
+# nothing rather than silently inheriting the next slot's.
+#
+# A coordinate must not match inside a longer one: workspace.patch.input@1 is a
+# prefix of a hypothetical workspace.patch.input@10, so the character after the
+# match may not be a digit.
 declared_identity() {
   awk -v coordinate="$1" '
-    seen {
-      if (match($0, /digest "[^"]*"/)) {
-        print substr($0, RSTART + 8, RLENGTH - 9)
+    function digest_in(text,   start) {
+      if (match(text, /digest "[^"]*"/)) {
+        return substr(text, RSTART + 8, RLENGTH - 9)
+      }
+      return ""
+    }
+    function names_slot(line,   at, tail) {
+      at = index(line, coordinate)
+      if (at == 0) {
+        return 0
+      }
+      tail = substr(line, at + length(coordinate), 1)
+      return tail !~ /[0-9]/
+    }
+    !seen && names_slot($0) {
+      seen = 1
+      found = digest_in(substr($0, index($0, coordinate) + length(coordinate)))
+      if (found != "") {
+        print found
         exit
       }
       next
     }
-    index($0, coordinate) > 0 { seen = 1 }
+    seen {
+      # Another coordinate, or the terminator, ends this declaration.
+      if ($0 ~ /@[0-9]+/ || index($0, ";") > 0) {
+        found = digest_in($0)
+        if (found != "") {
+          print found
+        }
+        exit
+      }
+      found = digest_in($0)
+      if (found != "") {
+        print found
+        exit
+      }
+    }
   ' "$2"
 }
 
