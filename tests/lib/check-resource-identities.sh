@@ -67,14 +67,16 @@ do
     echo "resource $resource has a malformed identity digest" >&2
     exit 1
   fi
-  case "$identity" in
-    *0000000000000000|*1111111111111111|*2222222222222222|*3333333333333333|\
-    *4444444444444444|*5555555555555555|*6666666666666666|*7777777777777777|\
-    *8888888888888888|*9999999999999999)
-      echo "resource $resource still pins a sentinel identity digest" >&2
-      exit 1
-      ;;
-  esac
+  # A sentinel is a placeholder character repeated to fill the field. Detect it
+  # structurally, by removing every occurrence of the first character and
+  # asking whether anything is left, rather than by enumerating the fills seen
+  # so far: the patch closure used all-9/8/7 and the observation closure used
+  # all-b/c/d, so any enumeration is a list of yesterday's placeholders.
+  first=${body%"${body#?}"}
+  if test -z "$(printf '%s' "$body" | tr -d "$first")"; then
+    echo "resource $resource still pins a sentinel identity digest" >&2
+    exit 1
+  fi
 
   declared=$(declared_identity "$coordinate" "$source_file")
   if test -z "$declared"; then

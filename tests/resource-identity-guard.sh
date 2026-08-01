@@ -120,4 +120,19 @@ write_vendor "$work/short" sha256:abc "$good_settlement" "$good_reconcile"
 write_source "$work/short.edict" sha256:abc "$good_settlement" "$good_reconcile"
 expect_reject "$work/short" "$work/short.edict" "truncated identity"
 
+# Sentinel identities: a placeholder repeated to fill the field. The generator
+# emitted all-9/8/7 for the patch closure and all-b/c/d for the observation
+# closure before Edict owned real artifacts, so both digit and letter fills
+# must be caught rather than an enumerated list of the ones already seen.
+for fill in 0 7 8 9 a b c d e f
+do
+  sentinel="sha256:$(
+    i=0
+    while test "$i" -lt 64; do printf '%s' "$fill"; i=$((i + 1)); done
+  )"
+  write_vendor "$work/sentinel" "$sentinel" "$good_settlement" "$good_reconcile"
+  write_source "$work/sentinel.edict" "$sentinel" "$good_settlement" "$good_reconcile"
+  expect_reject "$work/sentinel" "$work/sentinel.edict" "sentinel identity of all $fill"
+done
+
 echo "resource identity guard: all cases passed"
