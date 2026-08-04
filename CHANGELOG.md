@@ -80,6 +80,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   dangling link rather than a relative path, and the observation witness failed
   before it began. It worked only because every caller had passed absolute
   paths until CI existed.
+- Settlement attempt, basis, external-evidence, and schema-admission identities
+  in the observation report, which `patch-host` already projected and
+  `effect-host` did not. Without them a basis retained over the wrong bytes was
+  unobservable to the witness.
+- An observed-basis binding case for the observation witness. A succeeded
+  observation cannot establish it: the adapter refuses unless the basis it
+  derives over what it read equals the requested basis, so the two agree there
+  by construction. The stale-basis refusal is the one settlement family where
+  the retained evidence is independently informative, and a separate successful
+  observation of those exact bytes derives the same basis by a second route.
+  The case also pins that the refusal does not echo the requested basis, and
+  that the basis varies with the observed bytes on a fixed path, so neither
+  comparison can be satisfied by a constant. The two routes are independent
+  settlement paths, not independent implementations: both reach Echo's own
+  `bounded_workspace_observation_basis_v1`, so a defect inside that derivation
+  would appear identically on both and is out of this witness's reach.
 
 ### Removed
 
