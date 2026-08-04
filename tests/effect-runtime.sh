@@ -126,6 +126,19 @@ assert_posture() {
   assert_identity "$report_file"
 }
 
+# A settled observation must retain the identities that bind it to what was
+# actually read. patch-host projects these; without them a basis retained over
+# the wrong bytes is invisible to this witness.
+assert_settlement_evidence() {
+  report_file=$1
+  jq -e '
+    (.settlement.attemptId | test("^[0-9a-f]{64}$"))
+    and (.settlement.basisDigest | test("^[0-9a-f]{64}$"))
+    and (.settlement.externalEvidenceDigest | test("^[0-9a-f]{64}$"))
+    and (.settlement.schemaAdmissionEvidenceDigest | test("^[0-9a-f]{64}$"))
+  ' "$report_file" >/dev/null
+}
+
 complete_success_case() {
   case_name=$1
   worldline_byte=$2
@@ -168,6 +181,7 @@ complete_success_case() {
       and (.settlement.commitDigest | test("^[0-9a-f]{64}$"))
       and (.settlement.resultDigest | test("^[0-9a-f]{64}$"))' \
     "$case_root/settlement-report.json" >/dev/null
+  assert_settlement_evidence "$case_root/settlement-report.json"
 }
 
 # Golden path. The target file is absent while request and claim are durably
@@ -496,6 +510,7 @@ assert_rejected_case() {
       and .settlement.observation.refusal == $refusal
       and .settlement.observation.files == []' \
     "$case_root/settlement-report.json" >/dev/null
+  assert_settlement_evidence "$case_root/settlement-report.json"
 }
 
 # Known failures: unauthorized, parent-escaped, and symlink paths obstruct
@@ -504,6 +519,51 @@ assert_rejected_case unauthorized 44 secret.txt allowed.txt unauthorized-path re
 assert_rejected_case parent-escape 45 ../secret.txt allowed.txt invalid-path absent
 assert_rejected_case symlink 46 link.txt link.txt symlink-refused symlink
 assert_rejected_case stale-basis 70 stale.txt stale.txt stale-basis stale
+
+# The retained observation evidence must describe the bytes that were actually
+# read, and not merely agree with itself.
+#
+# A succeeded settlement cannot demonstrate that. The adapter derives a basis
+# over what it read and refuses unless that equals the requested basis, so on
+# the success path the retained basis and evidence are equal by construction
+# and comparing them proves nothing. The stale-basis refusal is the one
+# settlement family where the retained evidence is independently informative:
+# it carries a basis over what was actually found, which by construction is not
+# what the request declared.
+#
+# Echo derives that basis by domain-separated hashing over path and bytes.
+# Recomputing it here would rebuild producer logic in the consumer, which is
+# the boundary this witness exists to hold. Instead the host is asked for the
+# same value by a second route: a successful observation that declares those
+# exact bytes as its own expectation derives a basis over the same
+# (path, bytes) pair, and that must equal the evidence the refusal retained.
+#
+# `assert_rejected_case stale-basis` writes these bytes to `stale.txt`.
+stale_actual_value='changed after request'
+complete_success_case stale-basis-actual 81 "$stale_actual_value" stale.txt 65536
+
+stale_settlement="$effect_root/stale-basis/settlement-report.json"
+stale_evidence=$(jq -r '.settlement.externalEvidenceDigest' "$stale_settlement")
+stale_request_basis=$(jq -r '.settlement.basisDigest' "$stale_settlement")
+stale_actual_basis=$(
+  jq -r '.settlement.basisDigest' \
+    "$effect_root/stale-basis-actual/settlement-report.json"
+)
+
+# One basis over (stale.txt, "changed after request"), reached two ways.
+test "$stale_evidence" = "$stale_actual_basis"
+
+# The refusal must not satisfy that by echoing the basis the request declared.
+test "$stale_evidence" != "$stale_request_basis"
+
+# And the basis must vary with the observed bytes, so the equality above cannot
+# be satisfied by a constant. Same path, different content, different basis.
+complete_success_case stale-basis-other 82 'a wholly different content' stale.txt 65536
+stale_other_basis=$(
+  jq -r '.settlement.basisDigest' \
+    "$effect_root/stale-basis-other/settlement-report.json"
+)
+test "$stale_other_basis" != "$stale_actual_basis"
 
 # Boundary: first observe the exact encoding size for this path and value, then
 # prove that exact bound passes while one byte less produces a typed rejection.
@@ -667,4 +727,4 @@ then
 fi
 
 printf '%s\n' \
-  "Hello Effect suite passed: 1 ordered golden, 1 relative artifact path, 1 retry, 1 conflict, 1 aperture substitution, 1 replay, 1 fresh world, 1 rootless unknown, 4 refusals, 1 boundary probe, 2 boundaries, 2 artifact refusals, 1 request refusal, 3 fixed-seed property, 8 stress"
+  "Hello Effect suite passed: 1 ordered golden, 1 relative artifact path, 1 retry, 1 conflict, 1 aperture substitution, 1 replay, 1 fresh world, 1 rootless unknown, 4 refusals, 1 observed-basis binding reached by 2 routes, 1 boundary probe, 2 boundaries, 2 artifact refusals, 1 request refusal, 3 fixed-seed property, 8 stress"

@@ -516,6 +516,17 @@ fn report(
                 .ok_or_else(|| "settlement commit digest absent".to_owned())?;
             Ok::<_, String>(json!({
                 "kind": settlement_kind(settlement.kind),
+                "attemptId": hex(&settlement.attempt_id.as_hash()),
+                // The basis the request declared, and the evidence the adapter
+                // derived from what it actually read. A succeeded observation
+                // is refused unless these agree, so they are equal there by
+                // construction; a stale-basis refusal is where the evidence
+                // independently describes the observed bytes.
+                "basisDigest": hex(&settlement.basis_digest),
+                "externalEvidenceDigest": hex(&settlement.external_evidence_digest),
+                "schemaAdmissionEvidenceDigest": hex(
+                    &settlement.schema_admission_evidence_digest,
+                ),
                 "commitDigest": hex(&commit_digest),
                 "resultDigest": hex(&settlement.result_digest),
                 "canonicalResultByteCount": settlement.canonical_result_bytes.len(),

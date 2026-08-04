@@ -119,7 +119,11 @@ root. Post-claim aperture substitution cannot recover the durable claim, while
 path, symlink, basis, terminal-size, compiler-artifact, and runtime-request
 violations all fail closed at their owning boundary. Compiler artifacts are
 re-admitted at every phase, so a post-request substitution returns a typed
-obstruction without appending to the existing WAL.
+obstruction without appending to the existing WAL. The settlement's retained
+attempt, basis, external-evidence, and schema-admission identities are
+projected and bound to the bytes that were actually read: a stale-basis refusal
+retains a basis over what was found, and a separate successful observation of
+those same bytes derives the same value by an independent route.
 
 ### Basis-bound write
 
