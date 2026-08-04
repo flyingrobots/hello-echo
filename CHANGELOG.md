@@ -92,7 +92,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   observation of those exact bytes derives the same basis by a second route.
   The case also pins that the refusal does not echo the requested basis, and
   that the basis varies with the observed bytes on a fixed path, so neither
-  comparison can be satisfied by a constant.
+  comparison can be satisfied by a constant. The two routes are independent
+  settlement paths, not independent implementations: both reach Echo's own
+  `bounded_workspace_observation_basis_v1`, so a defect inside that derivation
+  would appear identically on both and is out of this witness's reach.
 
 ### Removed
 

@@ -119,11 +119,16 @@ root. Post-claim aperture substitution cannot recover the durable claim, while
 path, symlink, basis, terminal-size, compiler-artifact, and runtime-request
 violations all fail closed at their owning boundary. Compiler artifacts are
 re-admitted at every phase, so a post-request substitution returns a typed
-obstruction without appending to the existing WAL. The settlement's retained
-attempt, basis, external-evidence, and schema-admission identities are
-projected and bound to the bytes that were actually read: a stale-basis refusal
-retains a basis over what was found, and a separate successful observation of
-those same bytes derives the same value by an independent route.
+obstruction without appending to the existing WAL. The settlement report also
+projects the attempt identity, the requested basis, the adapter-derived
+external-evidence digest, and the schema-admission digest. One of those four is
+bound to what was read, and only in one settlement family: a stale-basis
+refusal carries an external-evidence digest over the bytes actually found, and
+a separately admitted successful observation of those same bytes derives the
+same value by a second settlement route through Echo's own basis derivation.
+That is an independent route, not an independent implementation — a defect
+inside the shared derivation would appear identically on both. The attempt and
+schema-admission identities are projected but not yet witnessed.
 
 ### Basis-bound write
 
