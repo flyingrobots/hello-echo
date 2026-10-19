@@ -112,6 +112,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Advanced the producer pins to Edict `0c8cf37` and Echo `4e801ef2`.
+  Edict's `causal.cell@1` fixture changed, so its manifest, exports and
+  adapter are re-vendored, and the source imports the new manifest identity
+  from the fixture's `manifest.sha256`. Edict `cfcf61e` raised the greeting
+  result projection's output bound from 512 to 2048 bytes, which changes the
+  projection identity and so every typed result identity; those are
+  recomputed with Echo's `application_result_identity`, whose formula
+  reproduces all 13 previous values. The package, verification-report and
+  manifest goldens are the new producers' outputs.
+
 - Advanced the vendored `workspace.patch@1` closure to Edict
   `df80f92ad6242c6da31a64224666fd37aa43b0d0`, which replaces the sentinel
   `workspace.patch.input@1`, `workspace.patch.settlement@1`, and

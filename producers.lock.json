@@ -2,10 +2,10 @@
   "version": 1,
   "edict": {
     "repository": "flyingrobots/edict",
-    "commit": "df80f92ad6242c6da31a64224666fd37aa43b0d0"
+    "commit": "0c8cf37b7fca089d7336dccf9cf5803f09e00156"
   },
   "echo": {
     "repository": "flyingrobots/echo",
-    "commit": "490134c0753a3df6a74da366cc71c1248764dc5a"
+    "commit": "4e801ef25e0cda7341cfbe64595be63278c12a08"
   }
 }
