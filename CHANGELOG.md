@@ -112,6 +112,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Advanced the Echo producer pin to `0faaf58a`, Echo `main` after #918 to
+  #923. No golden changed, and every CI step passes at that pin.
+
 - Advanced the producer pins to Edict `0c8cf37` and Echo `4e801ef2`.
   Edict's `causal.cell@1` fixture changed, so its manifest, exports and
   adapter are re-vendored, and the source imports the new manifest identity
