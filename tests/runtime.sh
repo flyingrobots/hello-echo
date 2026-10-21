@@ -16,9 +16,9 @@ package_file=.build/application/executable-operation-package.cbor
 verification_report_file=.build/application/verification-report.cbor
 lawpack_manifest_file=vendor/causal-cell/manifest.cbor
 typed_result_fixtures=tests/typed-result-fixtures.json
-expected_package_sha256=3665d692cdd120f116f18067f2fd583e841448d057b5e35515f57264f853d0f6
-expected_verification_report_sha256=2541c8263d95fdad52f4f5a3bbfed48fdefd9f20969156c3c3fd56be912b66dd
-expected_lawpack_manifest_sha256=7bb901c984a92ed50795f8b5f7efe8d0648124574fa82250c6373a30e94333c9
+expected_package_sha256=f6c10b84ed098fc77da3964417fb402f230f2669b7a11f4242d9893a43cc9026
+expected_verification_report_sha256=5402dca09680d68f305a9bcf4569a9a4cb88006e1fd60b95094a1f1dd687ce9e
+expected_lawpack_manifest_sha256=0a39e6b97b0c32cc67dc410391607731eedfdf0a254b7a889196cccfc1053f71
 
 sha256_file() {
   if command -v sha256sum >/dev/null; then
@@ -57,7 +57,7 @@ assert_common_witness() {
     '
     .operation == "examples.hello_echo@1.createGreeting"
     and .applicationResult.projectionIdentity
-      == "791fb36bb4d42273eb558ce4d03d68d90a678d15891fb9cbe4ad8a20bb56fa82"
+      == "e4546862dbb04a5680c7a2c102c576626c62f58aa33ca41e1d4dafd06c5fc8d0"
     and .applicationResult.outputType
       == "examples.hello_echo@1.GreetingCreated"
     and (.applicationResult.canonicalBytesHex | test("^([0-9a-f]{2})+$"))
